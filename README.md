@@ -3,7 +3,7 @@ A web application for recording interviews with the function of uploading videos
 
 
 # Repository structure
-'''
+```
 web-interview-recorder/
 │
 ├── README.md
@@ -76,4 +76,4 @@ web-interview-recorder/
 │
 └── scripts/
     └── generate-questions.js     # Tùy chọn: sinh danh sách câu hỏi (JSON)
-'''
+```
