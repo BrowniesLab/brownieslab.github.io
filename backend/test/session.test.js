@@ -1,19 +1,27 @@
-import fs from "fs";
-import path from "path";
-import assert from "assert";
+import request from "supertest";
+import app from "../server.js";
 
-describe("Session", () => {
-  const folder = path.join("backend/uploads", "test_session");
-  const metaPath = path.join(folder, "meta.json");
+describe("Session APIs", () => {
+  const token = "123456";
+  let folderName;
 
-  it("should create folder", () => {
-    fs.mkdirSync(folder, { recursive: true });
-    assert.strictEqual(fs.existsSync(folder), true);
+  it("should start a session", async () => {
+    const res = await request(app)
+      .post("/api/session/start")
+      .send({ token, userName: "Nguyen Khanh" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.folder).toBeDefined();
+    folderName = res.body.folder;
   });
 
-  it("should create meta.json file", () => {
-    const meta = { userName: "tester", token: "123456" };
-    fs.writeFileSync(metaPath, JSON.stringify(meta));
-    assert.strictEqual(fs.existsSync(metaPath), true);
+  it("should finish a session", async () => {
+    const res = await request(app)
+      .post("/api/session/finish")
+      .send({ token, folder: folderName, questionsCount: 3 });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
   });
 });
