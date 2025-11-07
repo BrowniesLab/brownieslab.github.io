@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Web Interview Recorder</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+
+</head>
+<body>
+    <main>
+        <h1>Web Interview Recorder</h1>
+        <section id="start-screen">
+            <label>Token: <input id="token" /></label>
+            <label>Name: <input id="userName" /></label>
+            <button id="btnVerify">Verify & Start</button>
+            <p id="startMessage"></p>
+        </section>
+        <section id="interview-screen" hidden>
+            <div id="status">Status: <span id="statusText">idle</span></div>
+            <div id="questionArea">
+                <h2 id="questionTitle"></h2>
+                <video id="preview" autoplay playsinline muted></video>
+                <div id="controls">
+                    <button id="btnStartRecord">Start Recording</button>
+                    <button id="btnStopRecord" disabled>Stop</button>
+                    <button id="btnNext" disabled>Next</button>
+                    <button id="btnFinish">Finish</button>
+                </div>
+                <div id="uploadStatus"></div>
+                <div id="retryArea"></div>
+            </div>
+        </section>
+        
+        <footer>
+            <small>Local dev only. Production requires HTTPS for camera/micaccess.</small>
+        </footer>
+    </main>
+    <script src="/static/app.js"></script>
+</body>
+</html>

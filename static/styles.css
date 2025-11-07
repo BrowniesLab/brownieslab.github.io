@@ -1,0 +1,6 @@
+body { font-family: system-ui, Arial; padding: 1rem; background:#f7f8fa }
+main { max-width:900px; margin:0 auto; background:#fff; padding:1rem; borderradius:8px; box-shadow:0 4px 12px rgba(0,0,0,.05) }
+video { width:100%; max-height:360px; background:#000 }
+button { margin-right:.5rem }
+#uploadStatus { margin-top:.5rem }
+#status { margin-bottom: .5rem }
