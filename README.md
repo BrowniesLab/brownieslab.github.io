@@ -1,92 +1,95 @@
-# ComputerNetwork-Web_Interview_Recorder
-A web application for recording interviews with the function of uploading videos to server per question.
+# 📝 Web Interview Recorder
 
+A lightweight client–server application for conducting asynchronous video interviews using per-question recording and immediate upload.
 
-# Repository structure
+> **Developed as part of the Network and Communication Technology course.**
+
+## 📌 Overview
+
+The Web Interview Recorder is a browser-based system that allows candidates to answer interview questions one by one.
+
+Each response is recorded as a separate video file and uploaded immediately to the server to prevent data loss caused by network instability or large file transfers.
+
+**The system implements:**
+* Per-question video recording
+* Immediate upload with retry and exponential backoff
+* Token-based authentication
+* Session creation and metadata tracking
+* Structured server-side storage using timestamps
+* Optional per-question Speech-to-Text transcript generation
+
+## 🚀 Features
+
+* 🎥 **Record video per question** using MediaRecorder
+* 📤 **Upload each video immediately** after recording
+* 🔐 **Server-side token validation**
+* 🌐 **HTTPS compatibility** for accessing camera/microphone
+* 📁 **Organized server storage** with timestamp-based folder naming
+* ♻️ **Retry logic** with exponential backoff for unreliable networks
+* 📝 **Metadata tracking** for all uploaded files
+* 🗣️ **(Optional) Automatic Speech-to-Text** transcript
+
+## 📁 Project Structure
+
 ```
-web-interview-recorder/
+COMPUTERNETWORK-WEB_INTERVIEW_RECORDER/
 │
-├── README.md
-├── package.json
-├── .gitignore
-├── .env.example
+├── app/                       # Core backend application package
+│   ├── __pycache__/           # Compiled Python bytecode files
+│   ├── __init__.py            # Initializes the app module
+│   ├── config.py              # Configuration settings (paths, time zone, limits)
+│   ├── main.py                # Main API logic: verify-token, start, upload-one, finish
+│   └── utils.py               # Helper functions: folder creation, metadata update, naming
 │
-├── frontend/                     # Web app
-│   ├── package.json
-│   ├── vite.config.js            # hoặc next.config.js nếu dùng Next.js
-│   ├── public/
-│   │   └── index.html
-│   └── src/
-│       ├── main.jsx
-│       ├── App.jsx
-│       ├── components/
-│       │   ├── VideoRecorder.jsx # Ghi hình từng câu hỏi
-│       │   ├── QuestionCard.jsx  # Hiển thị câu hỏi + nút Next/Finish
-│       │   ├── UploadStatus.jsx  # Trạng thái upload/retry
-│       │   └── TokenForm.jsx     # Nhập token + tên người dùng
-│       ├── pages/
-│       │   ├── StartPage.jsx
-│       │   ├── InterviewPage.jsx
-│       │   └── FinishPage.jsx
-│       ├── hooks/
-│       │   └── useRecorder.js    # custom hook cho getUserMedia, stop/start, upload
-│       ├── services/
-│       │   └── api.js            # Gọi các endpoint: verify-token, session/start, upload-one, finish
-│       ├── utils/
-│       │   └── retry.js          # Hàm retry với exponential backoff
-│       └── styles/
-│           └── main.css
+├── recordings/                # Server-side storage of uploaded interview videos
+│                              # Automatically organized by timestamp and username
 │
-├── backend/                      # Server (Node.js + Express)
-│   ├── package.json
-│   ├── server.js                 # Điểm vào chính
-│   ├── config/
-│   │   └── appConfig.js
-│   ├── routes/
-│   │   ├── verifyToken.js
-│   │   ├── session.js
-│   │   └── upload.js
-│   ├── controllers/
-│   │   ├── tokenController.js
-│   │   ├── sessionController.js
-│   │   └── uploadController.js
-│   ├── middlewares/
-│   │   ├── authMiddleware.js
-│   │   └── errorHandler.js
-│   ├── services/
-│   │   ├── storageService.js     # Lưu file theo cấu trúc DD_MM_YYYY_HH_mm_ten_user/
-│   │   └── sttService.js         # (Bonus) Speech-to-Text
-│   ├── utils/
-│   │   ├── logger.js
-│   │   └── sanitizeName.js
-│   ├── uploads/                  # Folder chứa video upload
-│   │   └── (auto-generated folders: DD_MM_YYYY_HH_mm_ten_user/)
-│   └── tests/
-│       ├── token.test.js
-│       ├── upload.test.js
-│       └── session.test.js
+├── static/                    # Frontend assets served by the backend
+│   ├── app.js                 # Main client-side logic: recording, upload, retry/backoff
+│   ├── favicon.ico            # Website icon
+│   ├── index.html             # Main UI for the interview interface
+│   └── styles.css             # Page styling and layout
 │
-├── docs/
-│   ├── architecture-diagram.png  # Sơ đồ kiến trúc client–server
-│   ├── api-contract.md           # Tài liệu API
-│   ├── folder-structure.md
-│   ├── screenshots/              # Ảnh chụp giao diện
-│   ├── report.pdf                # Báo cáo nộp cuối kỳ
-│   └── task-allocation.xlsx      # Phân công nhiệm vụ nhóm
+├── .gitignore                 # Files and directories excluded from version control
+├── .python-version            # Python version pinning for runtime consistency
 │
-└── scripts/
-    └── generate-questions.js     # Tùy chọn: sinh danh sách câu hỏi (JSON)
+├── pyproject.toml             # Project metadata, dependencies, and build configuration
+├── requirements.txt           # Dependencies list for pip installation
+│
+├── run.sh                     # Shell script to start the server environment
+│
+└── uv.lock                    # Dependency lock file for reproducible environments
+
 ```
 
-# How to use source code
+## ⚙️ Installation
 
-### Cấp quyền thực thi cho script
+### 1. Clone the repository
+
+```bash
+git clone <repo-url>
+cd COMPUTERNETWORK-WEB_INTERVIEW_RECORDER
+```
+# 2. Create virtual environment
+```bash
+python -m venv .venv
+
+# Activate the environment:
+source .venv/bin/activate   # macOS / Linux
+# OR
+.\.venv\Scripts\activate    # Windows
+```
+# 3. Install dependencies
+```bash
+pip install -r requirements.txt
+```
+# 4. Run the server
+### Grant Execute Permission to the Script
 ```bash
 chmod +x run.sh
 ```
-
-### Chạy server
+### Run server
 ```bash
 ./run.sh
 ```
-
+This will launch the backend server and make the system available in the browser (usually at http://localhost:8000/).
