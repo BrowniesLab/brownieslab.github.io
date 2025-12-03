@@ -77,6 +77,7 @@ function showQuestion(index) {
   el("statusText").innerText = "ready";
   el("btnStartRecord").disabled = false;
   el("btnStopRecord").disabled = true;
+  el('btnRestartRecord').disabled = false;
   el("btnNext").disabled = true;
   el("uploadStatus").innerText = "";
   el("retryArea").innerText = "";
@@ -94,6 +95,10 @@ el("btnNext").addEventListener("click", () => {
   }
 });
 
+el('btnRestartRecord').addEventListener('click', () => {
+    restartRecording();
+});
+
 el("btnFinish").addEventListener("click", async () => {
   if (!sessionStarted) return;
   try {
@@ -109,6 +114,25 @@ el("btnFinish").addEventListener("click", async () => {
     alert("Failed to finish: " + err.message);
   }
 });
+
+function restartRecording() {
+    // 1. Dừng MediaRecorder nếu nó đang hoạt động
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+    }
+    
+    // 2. Xóa dữ liệu đã ghi
+    recordedBlobs = [];
+    
+    // 3. Đặt lại trạng thái UI về trạng thái 'ready'
+    el('statusText').innerText = 'ready to start again';
+    el('uploadStatus').innerText = 'Bản ghi bị xóa. Bấm START để quay lại.';
+    el('btnStartRecord').disabled = false; // Luôn cho phép bấm START
+    el('btnStopRecord').disabled = true;
+    el('btnNext').disabled = true;
+    el('btnRestartRecord').disabled = true; // TẮT NÚT RESTART sau khi reset
+    el('retryArea').innerHTML = '';
+}
 
 // --------------------- RECORDING ---------------------
 
@@ -131,22 +155,32 @@ function startRecording() {
     el("statusText").innerText = "recording";
     el("btnStartRecord").disabled = true;
     el("btnStopRecord").disabled = false;
+    el('btnRestartRecord').disabled = false;
   };
 
   mediaRecorder.start();
 }
 
 function stopRecordingAndUpload() {
-  if (!mediaRecorder) return;
-  mediaRecorder.onstop = async () => {
-    el("statusText").innerText = "stopped";
-    el("btnStopRecord").disabled = true;
+    if (!mediaRecorder) return;
+    
+    // Dừng MediaRecorder trước
+    mediaRecorder.stop();
 
-    // assemble blob
-    const blob = new Blob(recordedBlobs, { type: "video/webm" });
-    await uploadWithRetries(blob, currentQ + 1);
-  };
-  mediaRecorder.stop();
+    mediaRecorder.onstop = async () => {
+        el('statusText').innerText = 'stopped (ready to upload)';
+        el('btnStopRecord').disabled = true;
+        el('btnRestartRecord').disabled = false; // GIỮ NÚT RESTART BẬT
+
+        // assemble blob
+        const blob = new Blob(recordedBlobs, { type: 'video/webm' });
+        
+        // Tiến hành upload
+        await uploadWithRetries(blob, currentQ + 1);
+        
+        // Đặt lại onstop để tránh gọi hàm upload nhiều lần khi nút restart được bấm
+        mediaRecorder.onstop = null;
+    };
 }
 
 // --------------------- UPLOAD & RETRY ---------------------
@@ -163,6 +197,7 @@ async function uploadWithRetries(blob, questionIndex) {
       await uploadQuestion(blob, questionIndex);
       el("uploadStatus").innerText = "Upload successful";
       el("btnNext").disabled = false;
+      el('btnRestartRecord').disabled = true;
       return;
     } catch (err) {
       console.warn("Upload failed", attempts, err);

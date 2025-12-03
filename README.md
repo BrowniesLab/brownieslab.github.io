@@ -77,3 +77,16 @@ web-interview-recorder/
 └── scripts/
     └── generate-questions.js     # Tùy chọn: sinh danh sách câu hỏi (JSON)
 ```
+
+# How to use source code
+
+### Cấp quyền thực thi cho script
+```bash
+chmod +x run.sh
+```
+
+### Chạy server
+```bash
+./run.sh
+```
+
