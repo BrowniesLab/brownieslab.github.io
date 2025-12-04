@@ -16,7 +16,7 @@ Each response is recorded as a separate video file and uploaded immediately to t
 * Token-based authentication
 * Session creation and metadata tracking
 * Structured server-side storage using timestamps
-* Optional per-question Speech-to-Text transcript generation
+* Per-question Speech-to-Text transcript generation
 
 ## 🚀 Features
 
@@ -27,7 +27,7 @@ Each response is recorded as a separate video file and uploaded immediately to t
 * 📁 **Organized server storage** with timestamp-based folder naming
 * ♻️ **Retry logic** with exponential backoff for unreliable networks
 * 📝 **Metadata tracking** for all uploaded files
-* 🗣️ **(Optional) Automatic Speech-to-Text** transcript
+* 🗣️ **Automatic Speech-to-Text** transcript
 
 ## 📁 Project Structure
 
@@ -64,7 +64,7 @@ COMPUTERNETWORK-WEB_INTERVIEW_RECORDER/
 
 ## ⚙️ Installation
 
-### 1. Clone the repository
+# 1. Clone the repository
 
 ```bash
 git clone <repo-url>
