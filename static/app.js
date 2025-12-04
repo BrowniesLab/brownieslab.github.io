@@ -1,4 +1,5 @@
-// Frontend: index.html logic
+// static/app.js (updated, drop-in replacement)
+// Integrates your original logic with improved UI handling.
 
 const QUESTIONS = [
   "Question 1: Tell us about yourself.",
@@ -15,21 +16,68 @@ let currentQ = 0;
 let mediaStream = null;
 let mediaRecorder = null;
 let recordedBlobs = [];
-let isUploading = false;
 let sessionStarted = false;
 
+// UI helpers
 const el = (id) => document.getElementById(id);
+const startScreen = el('start-screen');
+const interviewScreen = el('interview-screen');
+const preview = el('preview');
+const questionTitle = el('questionTitle');
+const questionBody = el('questionBody');
+const questionsList = el('questionsList');
+const statusText = el('statusText');
+const uploadStatus = el('uploadStatus');
+const retryArea = el('retryArea');
+const uploadProgress = el('uploadProgress');
+const countEl = el('count');
 
+const btnVerify = el('btnVerify');
+const btnStartRecord = el('btnStartRecord');
+const btnStopRecord = el('btnStopRecord');
+const btnRestartRecord = el('btnRestartRecord');
+const btnNext = el('btnNext');
+const btnFinish = el('btnFinish');
+
+function renderQuestionsList() {
+  if (!questionsList) return;
+  questionsList.innerHTML = '';
+  QUESTIONS.forEach((q, idx) => {
+    const li = document.createElement('li');
+    li.textContent = `${idx + 1}. ${q}`;
+    if (idx === currentQ) li.style.fontWeight = '700';
+    questionsList.appendChild(li);
+  });
+  countEl && (countEl.innerText = `${currentQ + 1} / ${QUESTIONS.length}`);
+}
+
+function setStatus(s) {
+  statusText.innerText = s;
+}
+
+function showQuestion(index) {
+  currentQ = index;
+  questionTitle.innerText = QUESTIONS[index];
+  questionBody && (questionBody.innerText = QUESTIONS[index]);
+  setStatus('ready');
+  btnStartRecord.disabled = false;
+  btnStopRecord.disabled = true;
+  btnRestartRecord.disabled = true;
+  btnNext.disabled = true;
+  uploadStatus.innerText = '';
+  retryArea.innerHTML = '';
+  renderQuestionsList();
+}
+
+// POST helper
 async function postForm(url, formData) {
-  // returns parsed JSON or throws
   const r = await fetch(url, { method: "POST", body: formData });
   if (!r.ok) throw new Error("Network response not ok: " + r.status);
   return r.json();
 }
 
-// --------------------- VERIFY & START SESSION ---------------------
-
-el("btnVerify").addEventListener("click", async () => {
+// VERIFY & START SESSION
+btnVerify && btnVerify.addEventListener('click', async () => {
   try {
     token = el("token").value.trim();
     userName = el("userName").value.trim();
@@ -44,15 +92,12 @@ el("btnVerify").addEventListener("click", async () => {
     verifyData.append("token", token);
     await postForm("/api/verify-token", verifyData);
 
-    // request camera/mic first
     el("startMessage").innerText = "Requesting camera/microphone...";
-    mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: true,
-    });
-    el("preview").srcObject = mediaStream;
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+    preview.srcObject = mediaStream;
 
-    // start session on server
+    // start level meter after preview assigned (handled by observer below)
+
     const startData = new FormData();
     startData.append("token", token);
     startData.append("userName", userName);
@@ -60,8 +105,9 @@ el("btnVerify").addEventListener("click", async () => {
     folder = res.folder;
     sessionStarted = true;
 
-    document.getElementById("start-screen").hidden = true;
-    document.getElementById("interview-screen").hidden = false;
+    // swap UI
+    if (startScreen) startScreen.hidden = true;
+    if (interviewScreen) interviewScreen.hidden = false;
     showQuestion(0);
   } catch (err) {
     console.error(err);
@@ -69,37 +115,15 @@ el("btnVerify").addEventListener("click", async () => {
   }
 });
 
-// --------------------- QUESTION DISPLAY ---------------------
-
-function showQuestion(index) {
-  currentQ = index;
-  el("questionTitle").innerText = QUESTIONS[index];
-  el("statusText").innerText = "ready";
-  el("btnStartRecord").disabled = false;
-  el("btnStopRecord").disabled = true;
-  el('btnRestartRecord').disabled = false;
-  el("btnNext").disabled = true;
-  el("uploadStatus").innerText = "";
-  el("retryArea").innerText = "";
-}
-
-// --------------------- BUTTON HANDLERS ---------------------
-
-el("btnStartRecord").addEventListener("click", () => startRecording());
-el("btnStopRecord").addEventListener("click", () => stopRecordingAndUpload());
-el("btnNext").addEventListener("click", () => {
-  if (currentQ < QUESTIONS.length - 1) {
-    showQuestion(currentQ + 1);
-  } else {
-    el("statusText").innerText = "All questions shown";
-  }
+// BUTTON HANDLERS
+btnStartRecord && btnStartRecord.addEventListener('click', () => startRecording());
+btnStopRecord && btnStopRecord.addEventListener('click', () => stopRecordingAndUpload());
+btnRestartRecord && btnRestartRecord.addEventListener('click', () => restartRecording());
+btnNext && btnNext.addEventListener('click', () => {
+  if (currentQ < QUESTIONS.length - 1) showQuestion(currentQ + 1);
+  else setStatus('All questions shown');
 });
-
-el('btnRestartRecord').addEventListener('click', () => {
-    restartRecording();
-});
-
-el("btnFinish").addEventListener("click", async () => {
+btnFinish && btnFinish.addEventListener('click', async () => {
   if (!sessionStarted) return;
   try {
     const fd = new FormData();
@@ -107,7 +131,7 @@ el("btnFinish").addEventListener("click", async () => {
     fd.append("folder", folder);
     fd.append("questionsCount", String(currentQ + 1));
     await postForm("/api/session/finish", fd);
-    el("statusText").innerText = "finished";
+    setStatus('finished');
     alert("Session finished. Check server recordings folder.");
   } catch (err) {
     console.error(err);
@@ -115,27 +139,23 @@ el("btnFinish").addEventListener("click", async () => {
   }
 });
 
+// RESTART RECORDING
 function restartRecording() {
-    // 1. Dừng MediaRecorder nếu nó đang hoạt động
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-        mediaRecorder.stop();
-    }
-    
-    // 2. Xóa dữ liệu đã ghi
-    recordedBlobs = [];
-    
-    // 3. Đặt lại trạng thái UI về trạng thái 'ready'
-    el('statusText').innerText = 'ready to start again';
-    el('uploadStatus').innerText = 'Bản ghi bị xóa. Bấm START để quay lại.';
-    el('btnStartRecord').disabled = false; // Luôn cho phép bấm START
-    el('btnStopRecord').disabled = true;
-    el('btnNext').disabled = true;
-    el('btnRestartRecord').disabled = true; // TẮT NÚT RESTART sau khi reset
-    el('retryArea').innerHTML = '';
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    // stop, but upload callback uses onstop - we will clear recordedBlobs after stopping
+    mediaRecorder.stop();
+  }
+  recordedBlobs = [];
+  setStatus('ready to start again');
+  uploadStatus.innerText = 'Recording cleared. Press START to record again.';
+  btnStartRecord.disabled = false;
+  btnStopRecord.disabled = true;
+  btnNext.disabled = true;
+  btnRestartRecord.disabled = true;
+  retryArea.innerHTML = '';
 }
 
-// --------------------- RECORDING ---------------------
-
+// RECORDING
 function startRecording() {
   recordedBlobs = [];
   const options = { mimeType: "video/webm;codecs=vp8,opus" };
@@ -143,7 +163,7 @@ function startRecording() {
     mediaRecorder = new MediaRecorder(mediaStream, options);
   } catch (e) {
     console.error("MediaRecorder error:", e);
-    el("statusText").innerText = "MediaRecorder not supported";
+    setStatus("MediaRecorder not supported");
     return;
   }
 
@@ -152,113 +172,59 @@ function startRecording() {
   };
 
   mediaRecorder.onstart = () => {
-    el("statusText").innerText = "recording";
-    el("btnStartRecord").disabled = true;
-    el("btnStopRecord").disabled = false;
-    el('btnRestartRecord').disabled = false;
+    setStatus("recording");
+    btnStartRecord.disabled = true;
+    btnStopRecord.disabled = false;
+    btnRestartRecord.disabled = false;
   };
 
   mediaRecorder.start();
 }
 
 function stopRecordingAndUpload() {
-    if (!mediaRecorder) return;
-    
-    // Dừng MediaRecorder trước
-    mediaRecorder.stop();
+  if (!mediaRecorder) return;
 
-    mediaRecorder.onstop = async () => {
-        el('statusText').innerText = 'stopped (ready to upload)';
-        el('btnStopRecord').disabled = true;
-        el('btnRestartRecord').disabled = false; // GIỮ NÚT RESTART BẬT
+  mediaRecorder.stop();
 
-        // assemble blob
-        const blob = new Blob(recordedBlobs, { type: 'video/webm' });
-        
-        // Tiến hành upload
-        await uploadWithRetries(blob, currentQ + 1);
-        
-        // Đặt lại onstop để tránh gọi hàm upload nhiều lần khi nút restart được bấm
-        mediaRecorder.onstop = null;
-    };
+  mediaRecorder.onstop = async () => {
+    setStatus('stopped (ready to upload)');
+    btnStopRecord.disabled = true;
+    btnRestartRecord.disabled = false;
+
+    const blob = new Blob(recordedBlobs, { type: 'video/webm' });
+    try {
+      await uploadWithRetries(blob, currentQ + 1);
+    } catch (err) {
+      console.error('Upload process ended with error:', err);
+    } finally {
+      // avoid double-run
+      mediaRecorder.onstop = null;
+    }
+  };
 }
 
-// --------------------- UPLOAD & RETRY ---------------------
-
+// UPLOAD & RETRIES
 async function uploadWithRetries(blob, questionIndex) {
   let attempts = 0;
   const maxAttempts = 3;
   const backoffBase = 800; // ms
-  el("uploadStatus").innerText = "Uploading...";
+  uploadStatus.innerText = "Uploading...";
+  uploadProgress && uploadProgress.classList.remove('hidden');
+  uploadProgress && (uploadProgress.value = 0);
 
   while (attempts < maxAttempts) {
     attempts++;
     try {
       await uploadQuestion(blob, questionIndex);
-      el("uploadStatus").innerText = "Upload successful";
-      el("btnNext").disabled = false;
-      el('btnRestartRecord').disabled = true;
+      uploadStatus.innerText = "Upload successful";
+      uploadProgress && (uploadProgress.value = 100);
+      btnNext.disabled = false;
+      btnRestartRecord.disabled = true;
+      setTimeout(() => uploadProgress && uploadProgress.classList.add('hidden'), 600);
       return;
     } catch (err) {
       console.warn("Upload failed", attempts, err);
-      el("uploadStatus").innerText = `Upload failed (attempt ${attempts}): ${
-        err.message || err
-      }`;
+      uploadStatus.innerText = `Upload failed (attempt ${attempts}): ${err.message || err}`;
       if (attempts >= maxAttempts) break;
       const wait = backoffBase * Math.pow(2, attempts - 1);
-      await new Promise((r) => setTimeout(r, wait));
-    }
-  }
-
-  // show manual retry button
-  const retryArea = el("retryArea");
-  retryArea.innerHTML = "";
-  const btn = document.createElement("button");
-  btn.innerText = "Retry Upload";
-  btn.addEventListener("click", async () => {
-    retryArea.innerHTML = "";
-    el("uploadStatus").innerText = "Retrying...";
-    await uploadWithRetries(blob, questionIndex);
-  });
-  retryArea.appendChild(btn);
-}
-
-function uploadQuestion(blob, questionIndex) {
-  return new Promise((resolve, reject) => {
-    const form = new FormData();
-    form.append("token", token);
-    form.append("folder", folder);
-    form.append("questionIndex", String(questionIndex));
-    form.append("video", blob, `Q${questionIndex}.webm`);
-
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/upload-one");
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const resp = JSON.parse(xhr.responseText);
-          if (resp.ok) resolve(resp);
-          else reject(new Error(resp.error || "upload error"));
-        } catch (e) {
-          reject(e);
-        }
-      } else {
-        reject(new Error("HTTP " + xhr.status));
-      }
-    };
-
-    xhr.onerror = () => reject(new Error("Network error"));
-
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        el("uploadStatus").innerText = `Uploading: ${(
-          (e.loaded / e.total) *
-          100
-        ).toFixed(0)}%`;
-      }
-    };
-
-    xhr.send(form);
-  });
-}
+      await new P
