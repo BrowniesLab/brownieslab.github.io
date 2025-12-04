@@ -1,11 +1,12 @@
-// Frontend: index.html logic
-
+// ===============================
+// QUESTIONS
+// ===============================
 const QUESTIONS = [
-  "Question 1: Tell us about yourself.",
-  "Question 2: Describe a challenging project you worked on.",
-  "Question 3: How do you handle tight deadlines?",
-  "Question 4: Why do you want this role?",
-  "Question 5: Any questions for us?"
+  "Give a brief introduction about yourself.",
+  "Tell us about a project you are proud of.",
+  "How do you usually handle system errors or issues?",
+  "What do you expect from your working environment?",
+  "Why should we choose you for this position?"
 ];
 
 let token = null;
@@ -15,250 +16,193 @@ let currentQ = 0;
 let mediaStream = null;
 let mediaRecorder = null;
 let recordedBlobs = [];
-let isUploading = false;
 let sessionStarted = false;
 
+// Helper
 const el = (id) => document.getElementById(id);
 
+// ===============================
+// POST FORM
+// ===============================
 async function postForm(url, formData) {
-  // returns parsed JSON or throws
   const r = await fetch(url, { method: "POST", body: formData });
-  if (!r.ok) throw new Error("Network response not ok: " + r.status);
+  if (!r.ok) throw new Error("HTTP " + r.status);
   return r.json();
 }
 
-// --------------------- VERIFY & START SESSION ---------------------
-
+// ===============================
+// VERIFY TOKEN & START SESSION
+// ===============================
 el("btnVerify").addEventListener("click", async () => {
   try {
     token = el("token").value.trim();
     userName = el("userName").value.trim();
 
     if (!token || !userName) {
-      el("startMessage").innerText = "Token and Name required.";
+      el("startMessage").innerText = "Token and name cannot be empty.";
       return;
     }
 
     el("startMessage").innerText = "Verifying token...";
-    const verifyData = new FormData();
-    verifyData.append("token", token);
-    await postForm("/api/verify-token", verifyData);
 
-    // request camera/mic first
-    el("startMessage").innerText = "Requesting camera/microphone...";
-    mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: true,
-    });
+    const fd = new FormData();
+    fd.append("token", token);
+    await postForm("/api/verify-token", fd);
+
+    // Request camera/mic
+    el("startMessage").innerText = "Requesting camera/microphone access...";
+    mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     el("preview").srcObject = mediaStream;
 
-    // start session on server
-    const startData = new FormData();
-    startData.append("token", token);
-    startData.append("userName", userName);
-    const res = await postForm("/api/session/start", startData);
+    // Start session
+    const fd2 = new FormData();
+    fd2.append("token", token);
+    fd2.append("userName", userName);
+    const res = await postForm("/api/session/start", fd2);
     folder = res.folder;
     sessionStarted = true;
 
-    document.getElementById("start-screen").hidden = true;
-    document.getElementById("interview-screen").hidden = false;
+    // Switch UI
+    el("start-screen").hidden = true;
+    el("interview-screen").hidden = false;
+
     showQuestion(0);
   } catch (err) {
-    console.error(err);
-    el("startMessage").innerText = "Error: " + (err.message || err);
+    el("startMessage").innerText = "Error: " + err.message;
   }
 });
 
-// --------------------- QUESTION DISPLAY ---------------------
-
-function showQuestion(index) {
-  currentQ = index;
-  el("questionTitle").innerText = QUESTIONS[index];
+// ===============================
+// SHOW QUESTION
+// ===============================
+function showQuestion(i) {
+  currentQ = i;
+  el("questionTitle").innerText = QUESTIONS[i];
   el("statusText").innerText = "ready";
+
   el("btnStartRecord").disabled = false;
   el("btnStopRecord").disabled = true;
-  el('btnRestartRecord').disabled = false;
+  el("btnRestartRecord").disabled = true;
   el("btnNext").disabled = true;
+
   el("uploadStatus").innerText = "";
-  el("retryArea").innerText = "";
+  el("retryArea").innerHTML = "";
 }
 
-// --------------------- BUTTON HANDLERS ---------------------
-
-el("btnStartRecord").addEventListener("click", () => startRecording());
-el("btnStopRecord").addEventListener("click", () => stopRecordingAndUpload());
-el("btnNext").addEventListener("click", () => {
-  if (currentQ < QUESTIONS.length - 1) {
-    showQuestion(currentQ + 1);
-  } else {
-    el("statusText").innerText = "All questions shown";
-  }
-});
-
-el('btnRestartRecord').addEventListener('click', () => {
-    restartRecording();
-});
-
-el("btnFinish").addEventListener("click", async () => {
-  if (!sessionStarted) return;
-  try {
-    const fd = new FormData();
-    fd.append("token", token);
-    fd.append("folder", folder);
-    fd.append("questionsCount", String(currentQ + 1));
-    await postForm("/api/session/finish", fd);
-    el("statusText").innerText = "finished";
-    alert("Session finished. Check server recordings folder.");
-  } catch (err) {
-    console.error(err);
-    alert("Failed to finish: " + err.message);
-  }
-});
-
-function restartRecording() {
-    // 1. Dừng MediaRecorder nếu nó đang hoạt động
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-        mediaRecorder.stop();
-    }
-    
-    // 2. Xóa dữ liệu đã ghi
-    recordedBlobs = [];
-    
-    // 3. Đặt lại trạng thái UI về trạng thái 'ready'
-    el('statusText').innerText = 'ready to start again';
-    el('uploadStatus').innerText = 'Bản ghi bị xóa. Bấm START để quay lại.';
-    el('btnStartRecord').disabled = false; // Luôn cho phép bấm START
-    el('btnStopRecord').disabled = true;
-    el('btnNext').disabled = true;
-    el('btnRestartRecord').disabled = true; // TẮT NÚT RESTART sau khi reset
-    el('retryArea').innerHTML = '';
-}
-
-// --------------------- RECORDING ---------------------
-
-function startRecording() {
+// ===============================
+// RECORDING
+// ===============================
+el("btnStartRecord").addEventListener("click", () => {
   recordedBlobs = [];
-  const options = { mimeType: "video/webm;codecs=vp8,opus" };
-  try {
-    mediaRecorder = new MediaRecorder(mediaStream, options);
-  } catch (e) {
-    console.error("MediaRecorder error:", e);
-    el("statusText").innerText = "MediaRecorder not supported";
-    return;
-  }
+  mediaRecorder = new MediaRecorder(mediaStream, { mimeType: "video/webm" });
 
   mediaRecorder.ondataavailable = (e) => {
-    if (e.data && e.data.size > 0) recordedBlobs.push(e.data);
+    if (e.data.size > 0) recordedBlobs.push(e.data);
   };
 
   mediaRecorder.onstart = () => {
     el("statusText").innerText = "recording";
     el("btnStartRecord").disabled = true;
     el("btnStopRecord").disabled = false;
-    el('btnRestartRecord').disabled = false;
+    el("btnRestartRecord").disabled = false;
   };
 
   mediaRecorder.start();
-}
+});
 
-function stopRecordingAndUpload() {
-    if (!mediaRecorder) return;
-    
-    // Dừng MediaRecorder trước
-    mediaRecorder.stop();
+el("btnStopRecord").addEventListener("click", () => {
+  mediaRecorder.stop();
 
-    mediaRecorder.onstop = async () => {
-        el('statusText').innerText = 'stopped (ready to upload)';
-        el('btnStopRecord').disabled = true;
-        el('btnRestartRecord').disabled = false; // GIỮ NÚT RESTART BẬT
+  mediaRecorder.onstop = () => {
+    el("statusText").innerText = "stopped";
+    el("btnStopRecord").disabled = true;
 
-        // assemble blob
-        const blob = new Blob(recordedBlobs, { type: 'video/webm' });
-        
-        // Tiến hành upload
-        await uploadWithRetries(blob, currentQ + 1);
-        
-        // Đặt lại onstop để tránh gọi hàm upload nhiều lần khi nút restart được bấm
-        mediaRecorder.onstop = null;
-    };
-}
+    const blob = new Blob(recordedBlobs, { type: "video/webm" });
+    uploadWithRetry(blob, currentQ + 1);
+  };
+});
 
-// --------------------- UPLOAD & RETRY ---------------------
+// ===============================
+// RESTART RECORD
+// ===============================
+el("btnRestartRecord").addEventListener("click", () => {
+  recordedBlobs = [];
+  el("statusText").innerText = "ready";
+  el("uploadStatus").innerText = "Recording deleted. Press Start to record again.";
+  el("btnStartRecord").disabled = false;
+  el("btnStopRecord").disabled = true;
+  el("btnNext").disabled = true;
+});
 
-async function uploadWithRetries(blob, questionIndex) {
+// ===============================
+// UPLOAD WITH RETRY
+// ===============================
+async function uploadWithRetry(blob, qIndex) {
   let attempts = 0;
-  const maxAttempts = 3;
-  const backoffBase = 800; // ms
-  el("uploadStatus").innerText = "Uploading...";
+  const max = 3;
 
-  while (attempts < maxAttempts) {
+  while (attempts < max) {
     attempts++;
     try {
-      await uploadQuestion(blob, questionIndex);
+      await uploadQuestion(blob, qIndex);
       el("uploadStatus").innerText = "Upload successful";
       el("btnNext").disabled = false;
-      el('btnRestartRecord').disabled = true;
       return;
     } catch (err) {
-      console.warn("Upload failed", attempts, err);
-      el("uploadStatus").innerText = `Upload failed (attempt ${attempts}): ${
-        err.message || err
-      }`;
-      if (attempts >= maxAttempts) break;
-      const wait = backoffBase * Math.pow(2, attempts - 1);
-      await new Promise((r) => setTimeout(r, wait));
+      el("uploadStatus").innerText = `Upload failed (attempt ${attempts}): ${err.message}`;
+      await new Promise((r) => setTimeout(r, 800 * attempts));
     }
   }
 
-  // show manual retry button
-  const retryArea = el("retryArea");
-  retryArea.innerHTML = "";
-  const btn = document.createElement("button");
-  btn.innerText = "Retry Upload";
-  btn.addEventListener("click", async () => {
-    retryArea.innerHTML = "";
-    el("uploadStatus").innerText = "Retrying...";
-    await uploadWithRetries(blob, questionIndex);
-  });
-  retryArea.appendChild(btn);
+  const retryBtn = document.createElement("button");
+  retryBtn.innerText = "Retry";
+  retryBtn.className = "btn-blue";
+  retryBtn.onclick = () => uploadWithRetry(blob, qIndex);
+
+  el("retryArea").appendChild(retryBtn);
 }
 
-function uploadQuestion(blob, questionIndex) {
+function uploadQuestion(blob, qIndex) {
   return new Promise((resolve, reject) => {
-    const form = new FormData();
-    form.append("token", token);
-    form.append("folder", folder);
-    form.append("questionIndex", String(questionIndex));
-    form.append("video", blob, `Q${questionIndex}.webm`);
+    const fd = new FormData();
+    fd.append("token", token);
+    fd.append("folder", folder);
+    fd.append("questionIndex", qIndex);
+    fd.append("video", blob, `Q${qIndex}.webm`);
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/upload-one");
 
     xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const resp = JSON.parse(xhr.responseText);
-          if (resp.ok) resolve(resp);
-          else reject(new Error(resp.error || "upload error"));
-        } catch (e) {
-          reject(e);
-        }
-      } else {
-        reject(new Error("HTTP " + xhr.status));
-      }
+      if (xhr.status === 200) {
+        const json = JSON.parse(xhr.responseText);
+        if (json.ok) resolve(json);
+        else reject(new Error("Server error"));
+      } else reject(new Error("HTTP " + xhr.status));
     };
 
     xhr.onerror = () => reject(new Error("Network error"));
-
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        el("uploadStatus").innerText = `Uploading: ${(
-          (e.loaded / e.total) *
-          100
-        ).toFixed(0)}%`;
-      }
-    };
-
-    xhr.send(form);
+    xhr.send(fd);
   });
 }
+
+// ===============================
+// NEXT QUESTION
+// ===============================
+el("btnNext").addEventListener("click", () => {
+  if (currentQ < QUESTIONS.length - 1) showQuestion(currentQ + 1);
+  else el("statusText").innerText = "No more questions";
+});
+
+// ===============================
+// FINISH SESSION
+// ===============================
+el("btnFinish").addEventListener("click", async () => {
+  const fd = new FormData();
+  fd.append("token", token);
+  fd.append("folder", folder);
+  fd.append("questionsCount", currentQ + 1);
+
+  await postForm("/api/session/finish", fd);
+  alert("The interview session has ended.");
+});
