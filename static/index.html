@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Web Interview Recorder</title>
-  <link rel="stylesheet" href="./styles.css" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Web Interview Recorder</title>
+    <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
   <div class="app">
@@ -31,14 +31,14 @@
     </section>
 
     <!-- INTERVIEW SCREEN -->
-    <section id="interview-screen" class="hidden container-grid">
+    <section id="interview-screen" class="hidden container-grid" hidden>
       <!-- left: preview + controls -->
       <div class="left-col card">
         <div class="preview-wrap">
           <video id="preview" autoplay playsinline muted class="preview-video"></video>
           <div class="preview-meta">
-            <div id="statusBadge" class="badge">Ready</div>
-            <div id="statusText" class="muted">ready</div>
+            <div class="badge-small">Status:</div>
+            <div id="status">Status: <span id="statusText">idle</span></div>
           </div>
         </div>
 
@@ -59,7 +59,7 @@
           <div id="retryArea" class="retry-area"></div>
         </div>
 
-        <div class="session-actions">
+        <div class="session-actions" style="margin-top:12px">
           <button id="btnNext" class="outline" disabled>Next Question</button>
           <button id="btnFinish" class="outline">Finish Session</button>
         </div>
@@ -76,18 +76,17 @@
           <!-- question text goes here -->
         </div>
 
-        <div class="list-area">
+        <div class="list-area" style="margin-top:14px">
           <h3 class="muted">Questions</h3>
           <ol id="questionsList" class="questions-list"></ol>
         </div>
 
-        <footer class="muted tiny">Tip: If upload fails, use Retry. Recordings are sent to server per question.</footer>
+        <footer class="muted tiny" style="margin-top:12px">Tip: If upload fails, use Retry. Recordings are sent to server per question.</footer>
       </div>
     </section>
-
   </div>
 
   <audio id="player" controls hidden></audio>
-  <script src="./script.js" defer></script>
+  <script src="/static/app.js" defer></script>
 </body>
 </html>
