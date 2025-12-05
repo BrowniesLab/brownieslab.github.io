@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Web Interview Recorder</title>
+
+    <!-- Tailwind (nếu bạn muốn dùng thêm style) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app">
+
+    <!-- START SCREEN -->
+    <section id="start-screen" class="card center-card">
+      <h1>Web Interview Recorder</h1>
+      <p class="muted">Enter token and name to start a recorded interview session.</p>
+
+      <div class="form-row">
+        <label>Token</label>
+        <input id="token" type="text" placeholder="Enter token" />
+      </div>
+
+      <div class="form-row">
+        <label>Name</label>
+        <input id="userName" type="text" placeholder="Your full name" />
+      </div>
+
+      <div class="form-row actions">
+        <button id="btnVerify" class="cta">Verify & Start</button>
+      </div>
+
+      <div id="startMessage" class="muted tiny"></div>
+    </section>
+
+    <!-- INTERVIEW SCREEN -->
+    <section id="interview-screen" class="hidden container-grid">
+      <!-- LEFT COLUMN -->
+      <div class="left-col card">
+        <div class="preview-wrap">
+          <video id="preview" autoplay playsinline muted class="preview-video"></video>
+          <div class="preview-meta">
+            <div class="badge-small">Status:</div>
+            <div id="status">Status: <span id="statusText">idle</span></div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button id="btnStartRecord" class="cta">Start</button>
+          <button id="btnStopRecord" class="secondary" disabled>Stop</button>
+          <button id="btnRestartRecord" class="outline" disabled>Restart</button>
+        </div>
+
+        <div class="visual">
+          <canvas id="levelCanvas" height="48"></canvas>
+          <div class="muted tiny">Live level</div>
+        </div>
+
+        <div class="upload-area">
+          <div id="uploadStatus" class="muted tiny"></div>
+          <progress id="uploadProgress" value="0" max="100" class="progress hidden"></progress>
+          <div id="retryArea" class="retry-area"></div>
+        </div>
+
+        <div class="session-actions">
+          <button id="btnNext" class="outline" disabled>Next Question</button>
+          <button id="btnFinish" class="outline">Finish Session</button>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div class="right-col card">
+        <div class="header">
+          <h2 id="questionTitle">Question</h2>
+          <div id="count" class="muted tiny">0 / 0</div>
+        </div>
+
+        <div id="questionBody" class="question-body muted tiny"></div>
+
+        <div class="list-area">
+          <h3 class="muted">Questions</h3>
+          <ol id="questionsList" class="questions-list"></ol>
+        </div>
+
+        <footer class="muted tiny">
+          Tip: If upload fails, use Retry. Recordings are uploaded per question.
+        </footer>
+      </div>
+    </section>
+
+  </div>
+
+  <audio id="player" controls hidden></audio>
+
+  <!-- MAIN JS -->
+  <script src="/static/app.js" defer></script>
+
+  <footer class="text-xs text-slate-500 text-center mt-6">
+      Local development only — production requires HTTPS for camera/microphone access.
+  </footer>
+
+</body>
+</html>
