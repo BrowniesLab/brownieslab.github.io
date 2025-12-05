@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import json
 from datetime import datetime
+import pytz
 from app.config import VALID_TOKENS, TIMEZONE, RECORDINGS_DIR
 from app.utils import extract_audio_from_video, audio_to_text
 from app.utils import make_folder_name, sanitize_filename, write_metadata, log_event, now_iso, extract_audio_from_video, audio_to_text
@@ -51,8 +52,9 @@ def sanitize_filename(name: str):
     return "".join(c for c in name if c.isalnum() or c in "-_").rstrip()
 
 def make_folder_name(user: str):
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    return f"{user}_{timestamp}"
+    tz = pytz.timezone("Asia/Bangkok")
+    timestamp = datetime.now(tz).strftime("%d_%m_%Y_%H_%M")
+    return f"{timestamp}_{user}"
 
 def write_metadata(folder: Path, data: dict):
     with (folder / "meta.json").open("w", encoding="utf-8") as f:
@@ -67,7 +69,7 @@ def log_event(folder: Path, msg: str):
 # Root trả về index.html
 @app.get("/", include_in_schema=False)
 async def root_index():
-    idx = STATIC_DIR / "index.html"
+    idx = BASE_DIR / "index.html"
     if not idx.exists():
         raise HTTPException(status_code=404, detail="index.html not found")
     return FileResponse(idx)
