@@ -65,7 +65,7 @@ const MAX_ATTEMPTS = 2;         // Giới hạn tổng số lần quay (1 gốc 
 // ===============================
 function showQuestion(index) {
   currentQ = index;
-  currentAttempt = 1; // Reset về lần thử đầu tiên mỗi khi qua câu hỏi mới
+  currentAttempt = 1; // Reset biến đếm về 1
 
   questionTitle.innerText = QUESTIONS[index];
   questionBody.innerText = QUESTIONS[index];
@@ -74,8 +74,11 @@ function showQuestion(index) {
 
   btnStartRecord.disabled = false;
   btnStopRecord.disabled = true;
-  btnRestartRecord.disabled = true; // Chỉ cho phép restart sau khi đã quay xong lần 1
   btnNext.disabled = true;
+
+  btnRestartRecord.disabled = true; // Khóa lại cho đến khi quay xong lần 1
+  btnRestartRecord.innerText = "Re-record"; // Trả lại tên mặc định (xóa chữ "No retries left")
+
 
   uploadStatus.innerText = "";
   retryArea.innerHTML = "";
