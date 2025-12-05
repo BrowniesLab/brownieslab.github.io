@@ -67,7 +67,7 @@ def log_event(folder: Path, msg: str):
 # Root trả về index.html
 @app.get("/", include_in_schema=False)
 async def root_index():
-    idx = STATIC_DIR / "index.html"
+    idx = BASE_DIR / "index.html"
     if not idx.exists():
         raise HTTPException(status_code=404, detail="index.html not found")
     return FileResponse(idx)
