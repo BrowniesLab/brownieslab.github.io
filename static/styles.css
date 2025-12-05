@@ -1,6 +1,52 @@
-body { font-family: system-ui, Arial; padding: 1rem; background:#f7f8fa }
-main { max-width:900px; margin:0 auto; background:#fff; padding:1rem; borderradius:8px; box-shadow:0 4px 12px rgba(0,0,0,.05) }
-video { width:100%; max-height:360px; background:#000 }
-button { margin-right:.5rem }
-#uploadStatus { margin-top:.5rem }
-#status { margin-bottom: .5rem }
+body {
+    font-family: system-ui, Arial;
+}
+
+.input {
+    width: 100%;
+    border: 1px solid #d1d5db;
+    padding: 8px;
+    border-radius: 6px;
+}
+
+.btn-primary {
+    background: #2563eb;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 6px;
+}
+
+.btn-green {
+    background: #16a34a;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 6px;
+}
+
+.btn-yellow {
+    background: #ca8a04;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 6px;
+}
+
+.btn-blue {
+    background: #2563eb;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 6px;
+}
+
+.btn-dark {
+    background: #1e293b;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 6px;
+}
+
+.btn-gray {
+    background: #6b7280;
+    color: white;
+    padding: 8px 14px;
+    border-radius: 6px;
+}
