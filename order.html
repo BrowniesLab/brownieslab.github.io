@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#22130d">
+  <title>Brownies Lab · Đặt bánh</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="order.html">Brownies Lab<small id="hello">Xin chào</small></a>
+      <span class="spacer"></span>
+      <a class="linkbtn" id="admin-link" href="admin.html" hidden>Quản trị</a>
+      <button class="linkbtn" id="logout" type="button">Đăng xuất</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="points" aria-live="polite">
+      <span class="num" id="points">…</span>
+      <span class="label">điểm thưởng</span>
+      <span class="rule" id="points-rule"></span>
+    </section>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-menu" aria-selected="true" aria-controls="panel-menu">Đặt bánh</button>
+      <button class="tab" role="tab" id="tab-history" aria-selected="false" aria-controls="panel-history">Đơn của tôi</button>
+    </div>
+
+    <section id="panel-menu" role="tabpanel" aria-labelledby="tab-menu">
+      <h2 class="sr-title">Menu đợt này</h2>
+      <ul class="menu-list" id="menu"><li class="loading">Đang tải menu…</li></ul>
+
+      <div class="receipt" id="receipt">
+        <h2>Phiếu đặt bánh</h2>
+        <div id="cart-lines"><p class="empty">Chưa chọn món nào.</p></div>
+        <label class="field" style="margin-top:1rem"><span>Ghi chú (tuỳ chọn)</span>
+          <textarea id="note" rows="2" maxlength="500" placeholder="Giờ nhận, địa chỉ giao, lời nhắn…"></textarea>
+        </label>
+      </div>
+    </section>
+
+    <section id="panel-history" role="tabpanel" aria-labelledby="tab-history" hidden>
+      <ul class="orders" id="orders"><li class="loading">Đang tải…</li></ul>
+    </section>
+  </main>
+
+  <div class="cartbar" id="cartbar">
+    <div class="cartbar-inner">
+      <div class="sum"><strong id="bar-total">0đ</strong><span id="bar-sub">Chọn món để đặt</span></div>
+      <button class="btn btn-primary" id="submit" type="button" disabled>Gửi đơn</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    const session = requireSession();
+    let menu = [];
+    const cart = new Map(); // itemId -> qty
+    let rule = { unitVnd: 10000, pointsPerUnit: 1 };
+    let historyLoaded = false;
+
+    const $ = (id) => document.getElementById(id);
+
+    if (session) {
+      $('hello').textContent = 'Xin chào, ' + session.name;
+      $('admin-link').hidden = !session.isAdmin;
+      $('points').textContent = session.points;
+      $('logout').addEventListener('click', logout);
+      init();
+    }
+
+    // Ước tính điểm phía client chỉ để hiển thị; điểm thật do server tính
+    const estimatePoints = (total) => rule.unitVnd > 0 ? Math.floor(total / rule.unitVnd) * rule.pointsPerUnit : 0;
+
+    async function init() {
+      refreshPoints();
+      try {
+        menu = await apiGet('getMenu');
+        renderMenu();
+      } catch (err) {
+        $('menu').innerHTML = '<li class="empty">Không tải được menu.</li>';
+        handleError(err);
+      }
+    }
+
+    async function refreshPoints() {
+      try {
+        const p = await api('myPoints');
+        rule = p.rule;
+        $('points').textContent = p.points;
+        $('points-rule').textContent = `Mỗi ${formatVND(rule.unitVnd)} được ${rule.pointsPerUnit} điểm, cộng ngay khi đặt đơn.`;
+        $('admin-link').hidden = !p.isAdmin;
+        Session.update({ points: p.points, name: p.name, isAdmin: p.isAdmin });
+        renderCart();
+      } catch (err) { handleError(err); }
+    }
+
+    function renderMenu() {
+      if (!menu.length) {
+        $('menu').innerHTML = '<li class="empty">Đợt này chưa mở bán. Quay lại sau nhé!</li>';
+        return;
+      }
+      $('menu').innerHTML = menu.map(m => `
+        <li class="menu-item" data-id="${escapeHtml(m.itemId)}">
+          <div class="menu-head">
+            <h3>${escapeHtml(m.name)}</h3><span class="leader"></span>
+            <span class="price">${formatVND(m.price)}</span>
+          </div>
+          ${m.description ? `<p class="menu-desc">${escapeHtml(m.description)}</p>` : ''}
+          <div class="stepper">
+            <button type="button" data-act="dec" aria-label="Bớt ${escapeHtml(m.name)}">−</button>
+            <output aria-live="polite">0</output>
+            <button type="button" data-act="inc" aria-label="Thêm ${escapeHtml(m.name)}">+</button>
+          </div>
+        </li>`).join('');
+      syncSteppers();
+    }
+
+    $('menu').addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-act]');
+      if (!btn) return;
+      const id = btn.closest('.menu-item').dataset.id;
+      const qty = (cart.get(id) || 0) + (btn.dataset.act === 'inc' ? 1 : -1);
+      if (qty <= 0) cart.delete(id); else cart.set(id, Math.min(qty, 99));
+      syncSteppers();
+      renderCart();
+    });
+
+    function syncSteppers() {
+      document.querySelectorAll('.menu-item').forEach(li => {
+        const q = cart.get(li.dataset.id) || 0;
+        li.querySelector('output').textContent = q;
+        li.querySelector('[data-act=dec]').disabled = q === 0;
+        li.querySelector('[data-act=inc]').disabled = q >= 99;
+        li.classList.toggle('in-cart', q > 0);
+      });
+    }
+
+    function cartLines() {
+      return [...cart].map(([id, qty]) => {
+        const m = menu.find(x => x.itemId === id);
+        return m ? { ...m, qty, sub: m.price * qty } : null;
+      }).filter(Boolean);
+    }
+
+    function renderCart() {
+      const lines = cartLines();
+      const total = lines.reduce((s, l) => s + l.sub, 0);
+      const count = lines.reduce((s, l) => s + l.qty, 0);
+      const pts = estimatePoints(total);
+
+      $('cart-lines').innerHTML = lines.length ? `
+        <table>
+          ${lines.map(l => `<tr><td>${escapeHtml(l.name)} × ${l.qty}</td><td>${formatVND(l.sub)}</td></tr>`).join('')}
+          <tr class="total"><td>Tổng cộng</td><td>${formatVND(total)}</td></tr>
+          <tr class="earn"><td>Điểm sẽ nhận</td><td>+${pts}</td></tr>
+        </table>` : '<p class="empty">Chưa chọn món nào.</p>';
+
+      $('bar-total').textContent = formatVND(total);
+      $('bar-sub').textContent = count ? `${count} món · +${pts} điểm` : 'Chọn món để đặt';
+      $('submit').disabled = !count;
+    }
+
+    $('submit').addEventListener('click', async () => {
+      const lines = cartLines();
+      if (!lines.length) return;
+      const total = lines.reduce((s, l) => s + l.sub, 0);
+      if (!confirm(`Gửi đơn ${formatVND(total)}?`)) return;
+      try {
+        const r = await withBusy($('submit'), () => api('createOrder', {
+          items: lines.map(l => ({ itemId: l.itemId, qty: l.qty })),
+          note: $('note').value.trim()
+        }), 'Đang gửi…');
+        cart.clear();
+        $('note').value = '';
+        syncSteppers();
+        renderCart();
+        $('points').textContent = r.points;
+        Session.update({ points: r.points });
+        historyLoaded = false;
+        toast(`Đã nhận đơn ${r.orderId} · ${formatVND(r.total)} · +${r.pointsEarned} điểm`, 'success');
+      } catch (err) {
+        handleError(err);
+        // Menu có thể đã đổi (món ngừng bán) → tải lại
+        if (/không còn bán/.test(err.message)) init();
+      }
+    });
+
+    // ---------- tabs & lịch sử ----------
+    function showTab(which) {
+      const isMenu = which === 'menu';
+      $('tab-menu').setAttribute('aria-selected', String(isMenu));
+      $('tab-history').setAttribute('aria-selected', String(!isMenu));
+      $('panel-menu').hidden = !isMenu;
+      $('panel-history').hidden = isMenu;
+      $('cartbar').hidden = !isMenu;
+      if (!isMenu && !historyLoaded) loadHistory();
+    }
+    $('tab-menu').addEventListener('click', () => showTab('menu'));
+    $('tab-history').addEventListener('click', () => showTab('history'));
+
+    function statusClass(s) {
+      const t = s.toLowerCase();
+      if (/hoàn|xong|đã giao|done/.test(t)) return 'done';
+      if (/huỷ|hủy|cancel/.test(t)) return 'cancel';
+      return '';
+    }
+
+    async function loadHistory() {
+      $('orders').innerHTML = '<li class="loading">Đang tải…</li>';
+      try {
+        const orders = await api('myOrders');
+        historyLoaded = true;
+        $('orders').innerHTML = orders.length ? orders.map(o => `
+          <li class="order">
+            <div class="order-top">
+              <span class="order-id">${escapeHtml(o.orderId)}</span>
+              <span class="status ${statusClass(o.status)}">${escapeHtml(o.status || '—')}</span>
+            </div>
+            <ul>${o.items.map(i => `<li>${escapeHtml(i.name)} × ${Number(i.qty) || 0}</li>`).join('')}</ul>
+            ${o.note ? `<p class="small muted">Ghi chú: ${escapeHtml(o.note)}</p>` : ''}
+            <div class="order-foot">
+              <span class="muted">${escapeHtml(o.createdAt)}</span>
+              <span><strong>${formatVND(o.total)}</strong> · +${o.pointsEarned} điểm</span>
+            </div>
+          </li>`).join('') : '<li class="empty">Bạn chưa có đơn nào.</li>';
+      } catch (err) {
+        $('orders').innerHTML = '<li class="empty">Không tải được lịch sử.</li>';
+        handleError(err);
+      }
+    }
+  </script>
+</body>
+</html>
