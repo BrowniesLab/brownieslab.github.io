@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#22130d">
+  <meta name="theme-color" content="#442009">
   <title>Brownies Lab · Đặt bánh</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -55,6 +55,70 @@
   </div>
 
   <script src="app.js"></script>
+
+  <!-- Animation: count-up, stepper bounce, cart pop -->
+  <script>
+  (function () {
+    /* ---- Count-up cho điểm thưởng ---- */
+    const pointsEl = document.getElementById('points');
+    let lastVal = null;
+
+    function countUp(endStr) {
+      const end = parseInt(endStr, 10);
+      if (isNaN(end) || end === lastVal) return;
+      lastVal = end;
+      pointsEl.classList.remove('counting');
+      void pointsEl.offsetWidth; // reflow to restart animation
+      const duration = 700;
+      const startTime = performance.now();
+      const startVal = 0;
+      function step(now) {
+        const t = Math.min((now - startTime) / duration, 1);
+        const eased = 1 - Math.pow(1 - t, 3); // ease-out-cubic
+        pointsEl.textContent = Math.round(startVal + (end - startVal) * eased);
+        if (t < 1) requestAnimationFrame(step);
+        else {
+          pointsEl.textContent = end;
+          pointsEl.classList.add('counting');
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    // Quan sát khi app.js ghi số vào #points
+    const obs = new MutationObserver(function () {
+      const v = pointsEl.textContent.trim();
+      if (v && v !== '…') countUp(v);
+    });
+    obs.observe(pointsEl, { childList: true, characterData: true, subtree: true });
+
+    /* ---- Stepper bounce + cart bar pop ---- */
+    document.addEventListener('click', function (e) {
+      const btn = e.target.closest('.stepper button:not(:disabled)');
+      if (!btn) return;
+
+      // Bounce stepper output
+      const out = btn.closest('.stepper').querySelector('output');
+      if (out) {
+        const stepper = btn.closest('.stepper');
+        stepper.classList.remove('bouncing');
+        void stepper.offsetWidth;
+        stepper.classList.add('bouncing');
+        setTimeout(function () { stepper.classList.remove('bouncing'); }, 370);
+      }
+
+      // Pop cart bar
+      const cartbar = document.getElementById('cartbar');
+      if (cartbar) {
+        cartbar.classList.remove('pop');
+        void cartbar.offsetWidth;
+        cartbar.classList.add('pop');
+        setTimeout(function () { cartbar.classList.remove('pop'); }, 370);
+      }
+    });
+  })();
+  </script>
+
   <script>
     const session = requireSession();
     let menu = [];
