@@ -1,7 +1,7 @@
 /* Brownies Lab — dùng chung cho mọi trang: gọi API + quản lý phiên đăng nhập */
 
 // Dán URL Web App (kết thúc bằng /exec) sau khi deploy Apps Script
-const API_URL = 'PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE';
+const API_URL = 'https://script.google.com/macros/s/AKfycbxJg7gvKQLzhFfz4VIiFp3LJUpq14JnRuT0NzhZmBJCB9pXQNbH5mNKvtE3dTCrcOkl/exec';
 
 const SESSION_KEY = 'brownieslab.session';
 
