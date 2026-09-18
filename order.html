@@ -9,7 +9,7 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="topbar-inner">
+    <div class="topbar-inner" style="max-width:68rem">
       <a class="brand" href="order.html">Brownies Lab<small id="hello">Xin chào</small></a>
       <span class="spacer"></span>
       <a class="linkbtn" id="admin-link" href="admin.html" hidden>Quản trị</a>
@@ -17,104 +17,102 @@
     </div>
   </header>
 
-  <main>
+  <div class="order-wrap">
+    <!-- Điểm thưởng -->
     <section class="points" aria-live="polite">
       <span class="num" id="points">…</span>
       <span class="label">điểm thưởng</span>
       <span class="rule" id="points-rule"></span>
     </section>
 
+    <!-- Tabs -->
     <div class="tabs" role="tablist">
-      <button class="tab" role="tab" id="tab-menu" aria-selected="true" aria-controls="panel-menu">Đặt bánh</button>
+      <button class="tab" role="tab" id="tab-menu"    aria-selected="true"  aria-controls="panel-menu">Đặt bánh</button>
       <button class="tab" role="tab" id="tab-history" aria-selected="false" aria-controls="panel-history">Đơn của tôi</button>
     </div>
 
+    <!-- Menu panel: 2-col layout -->
     <section id="panel-menu" role="tabpanel" aria-labelledby="tab-menu">
-      <h2 class="sr-title">Menu đợt này</h2>
-      <ul class="menu-list" id="menu"><li class="loading">Đang tải menu…</li></ul>
+      <div class="order-layout">
 
-      <div class="receipt" id="receipt">
-        <h2>Phiếu đặt bánh</h2>
-        <div id="cart-lines"><p class="empty">Chưa chọn món nào.</p></div>
-        <label class="field" style="margin-top:1rem"><span>Ghi chú (tuỳ chọn)</span>
-          <textarea id="note" rows="2" maxlength="500" placeholder="Giờ nhận, địa chỉ giao, lời nhắn…"></textarea>
-        </label>
+        <!-- Cột menu -->
+        <div class="menu-col">
+          <ul class="menu-list" id="menu">
+            <li class="loading" style="height:5rem"></li>
+            <li class="loading" style="height:5rem;margin-top:.75rem"></li>
+            <li class="loading" style="height:5rem;margin-top:.75rem"></li>
+          </ul>
+        </div>
+
+        <!-- Cột giỏ hàng (sticky trên desktop) -->
+        <aside class="cart-col">
+          <!-- Phiếu đặt -->
+          <div class="receipt" id="receipt">
+            <h2>Phiếu đặt bánh</h2>
+            <div id="cart-lines"><p class="empty">Chưa chọn món nào.</p></div>
+            <label class="field" style="margin-top:.85rem">
+              <span>Ghi chú <span class="muted" style="font-weight:400">(tuỳ chọn)</span></span>
+              <textarea id="note" rows="2" maxlength="500" placeholder="Giờ nhận, địa chỉ giao, lời nhắn…"></textarea>
+            </label>
+          </div>
+
+          <!-- Cart bar: static trong sidebar (desktop) / fixed bottom (mobile) -->
+          <div class="cartbar" id="cartbar">
+            <div class="cartbar-inner">
+              <div class="sum">
+                <strong id="bar-total">0đ</strong>
+                <span id="bar-sub">Chọn món để đặt</span>
+              </div>
+              <button class="btn btn-primary" id="submit" type="button" disabled>Gửi đơn</button>
+            </div>
+          </div>
+        </aside>
+
       </div>
     </section>
 
+    <!-- History panel -->
     <section id="panel-history" role="tabpanel" aria-labelledby="tab-history" hidden>
-      <ul class="orders" id="orders"><li class="loading">Đang tải…</li></ul>
+      <ul class="orders" id="orders"><li class="loading" style="height:5rem"></li></ul>
     </section>
-  </main>
-
-  <div class="cartbar" id="cartbar">
-    <div class="cartbar-inner">
-      <div class="sum"><strong id="bar-total">0đ</strong><span id="bar-sub">Chọn món để đặt</span></div>
-      <button class="btn btn-primary" id="submit" type="button" disabled>Gửi đơn</button>
-    </div>
   </div>
 
   <script src="app.js"></script>
 
-  <!-- Animation: count-up, stepper bounce, cart pop -->
+  <!-- Animation: count-up, stepper tap -->
   <script>
   (function () {
-    /* ---- Count-up cho điểm thưởng ---- */
+    /* Count-up điểm thưởng */
     const pointsEl = document.getElementById('points');
     let lastVal = null;
-
-    function countUp(endStr) {
-      const end = parseInt(endStr, 10);
+    function countUp(str) {
+      const end = parseInt(str, 10);
       if (isNaN(end) || end === lastVal) return;
       lastVal = end;
-      pointsEl.classList.remove('counting');
-      void pointsEl.offsetWidth; // reflow to restart animation
-      const duration = 700;
-      const startTime = performance.now();
-      const startVal = 0;
-      function step(now) {
-        const t = Math.min((now - startTime) / duration, 1);
-        const eased = 1 - Math.pow(1 - t, 3); // ease-out-cubic
-        pointsEl.textContent = Math.round(startVal + (end - startVal) * eased);
-        if (t < 1) requestAnimationFrame(step);
-        else {
-          pointsEl.textContent = end;
-          pointsEl.classList.add('counting');
-        }
+      const dur = 600, t0 = performance.now(), from = 0;
+      function tick(now) {
+        const p = Math.min((now - t0) / dur, 1);
+        const e = 1 - Math.pow(1 - p, 3);
+        pointsEl.textContent = Math.round(from + (end - from) * e);
+        if (p < 1) requestAnimationFrame(tick); else pointsEl.textContent = end;
       }
-      requestAnimationFrame(step);
+      requestAnimationFrame(tick);
     }
-
-    // Quan sát khi app.js ghi số vào #points
-    const obs = new MutationObserver(function () {
+    const obs = new MutationObserver(() => {
       const v = pointsEl.textContent.trim();
-      if (v && v !== '…') countUp(v);
+      if (v && v !== '…') { obs.disconnect(); countUp(v); }
     });
     obs.observe(pointsEl, { childList: true, characterData: true, subtree: true });
 
-    /* ---- Stepper bounce + cart bar pop ---- */
-    document.addEventListener('click', function (e) {
+    /* Stepper tap: nhẹ thôi */
+    document.addEventListener('click', (e) => {
       const btn = e.target.closest('.stepper button:not(:disabled)');
       if (!btn) return;
-
-      // Bounce stepper output
-      const out = btn.closest('.stepper').querySelector('output');
-      if (out) {
-        const stepper = btn.closest('.stepper');
-        stepper.classList.remove('bouncing');
-        void stepper.offsetWidth;
-        stepper.classList.add('bouncing');
-        setTimeout(function () { stepper.classList.remove('bouncing'); }, 370);
-      }
-
-      // Pop cart bar
-      const cartbar = document.getElementById('cartbar');
-      if (cartbar) {
-        cartbar.classList.remove('pop');
-        void cartbar.offsetWidth;
-        cartbar.classList.add('pop');
-        setTimeout(function () { cartbar.classList.remove('pop'); }, 370);
-      }
+      const st = btn.closest('.stepper');
+      st.classList.remove('pop');
+      void st.offsetWidth;
+      st.classList.add('pop');
+      setTimeout(() => st.classList.remove('pop'), 260);
     });
   })();
   </script>
@@ -122,10 +120,9 @@
   <script>
     const session = requireSession();
     let menu = [];
-    const cart = new Map(); // itemId -> qty
+    const cart = new Map();
     let rule = { unitVnd: 10000, pointsPerUnit: 1 };
     let historyLoaded = false;
-
     const $ = (id) => document.getElementById(id);
 
     if (session) {
@@ -136,8 +133,8 @@
       init();
     }
 
-    // Ước tính điểm phía client chỉ để hiển thị; điểm thật do server tính
-    const estimatePoints = (total) => rule.unitVnd > 0 ? Math.floor(total / rule.unitVnd) * rule.pointsPerUnit : 0;
+    const estimatePoints = (total) =>
+      rule.unitVnd > 0 ? Math.floor(total / rule.unitVnd) * rule.pointsPerUnit : 0;
 
     async function init() {
       refreshPoints();
@@ -155,7 +152,8 @@
         const p = await api('myPoints');
         rule = p.rule;
         $('points').textContent = p.points;
-        $('points-rule').textContent = `Mỗi ${formatVND(rule.unitVnd)} được ${rule.pointsPerUnit} điểm, cộng ngay khi đặt đơn.`;
+        $('points-rule').textContent =
+          `Mỗi ${formatVND(rule.unitVnd)} được ${rule.pointsPerUnit} điểm, cộng ngay khi đặt.`;
         $('admin-link').hidden = !p.isAdmin;
         Session.update({ points: p.points, name: p.name, isAdmin: p.isAdmin });
         renderCart();
@@ -169,15 +167,20 @@
       }
       $('menu').innerHTML = menu.map(m => `
         <li class="menu-item" data-id="${escapeHtml(m.itemId)}">
-          <div class="menu-head">
-            <h3>${escapeHtml(m.name)}</h3><span class="leader"></span>
-            <span class="price">${formatVND(m.price)}</span>
-          </div>
-          ${m.description ? `<p class="menu-desc">${escapeHtml(m.description)}</p>` : ''}
-          <div class="stepper">
-            <button type="button" data-act="dec" aria-label="Bớt ${escapeHtml(m.name)}">−</button>
-            <output aria-live="polite">0</output>
-            <button type="button" data-act="inc" aria-label="Thêm ${escapeHtml(m.name)}">+</button>
+          <div class="menu-item-body">
+            <div class="menu-head">
+              <h3>${escapeHtml(m.name)}</h3>
+              <span class="leader"></span>
+              <span class="price">${formatVND(m.price)}</span>
+            </div>
+            ${m.description ? `<p class="menu-desc">${escapeHtml(m.description)}</p>` : ''}
+            <div class="menu-foot">
+              <div class="stepper">
+                <button type="button" data-act="dec" aria-label="Bớt ${escapeHtml(m.name)}">−</button>
+                <output aria-live="polite">0</output>
+                <button type="button" data-act="inc" aria-label="Thêm ${escapeHtml(m.name)}">+</button>
+              </div>
+            </div>
           </div>
         </li>`).join('');
       syncSteppers();
@@ -214,7 +217,7 @@
       const lines = cartLines();
       const total = lines.reduce((s, l) => s + l.sub, 0);
       const count = lines.reduce((s, l) => s + l.qty, 0);
-      const pts = estimatePoints(total);
+      const pts   = estimatePoints(total);
 
       $('cart-lines').innerHTML = lines.length ? `
         <table>
@@ -224,7 +227,7 @@
         </table>` : '<p class="empty">Chưa chọn món nào.</p>';
 
       $('bar-total').textContent = formatVND(total);
-      $('bar-sub').textContent = count ? `${count} món · +${pts} điểm` : 'Chọn món để đặt';
+      $('bar-sub').textContent   = count ? `${count} món · +${pts} điểm` : 'Chọn món để đặt';
       $('submit').disabled = !count;
     }
 
@@ -248,12 +251,10 @@
         toast(`Đã nhận đơn ${r.orderId} · ${formatVND(r.total)} · +${r.pointsEarned} điểm`, 'success');
       } catch (err) {
         handleError(err);
-        // Menu có thể đã đổi (món ngừng bán) → tải lại
         if (/không còn bán/.test(err.message)) init();
       }
     });
 
-    // ---------- tabs & lịch sử ----------
     function showTab(which) {
       const isMenu = which === 'menu';
       $('tab-menu').setAttribute('aria-selected', String(isMenu));
@@ -268,13 +269,13 @@
 
     function statusClass(s) {
       const t = s.toLowerCase();
-      if (/hoàn|xong|đã giao|done/.test(t)) return 'done';
+      if (/hoàn|xong|đã giao|done/.test(t))  return 'done';
       if (/huỷ|hủy|cancel/.test(t)) return 'cancel';
       return '';
     }
 
     async function loadHistory() {
-      $('orders').innerHTML = '<li class="loading">Đang tải…</li>';
+      $('orders').innerHTML = '<li class="loading" style="height:5rem"></li>';
       try {
         const orders = await api('myOrders');
         historyLoaded = true;
@@ -284,13 +285,14 @@
               <span class="order-id">${escapeHtml(o.orderId)}</span>
               <span class="status ${statusClass(o.status)}">${escapeHtml(o.status || '—')}</span>
             </div>
-            <ul>${o.items.map(i => `<li>${escapeHtml(i.name)} × ${Number(i.qty) || 0}</li>`).join('')}</ul>
+            <ul>${o.items.map(i => `<li>${escapeHtml(i.name)} × ${Number(i.qty)||0}</li>`).join('')}</ul>
             ${o.note ? `<p class="small muted">Ghi chú: ${escapeHtml(o.note)}</p>` : ''}
             <div class="order-foot">
               <span class="muted">${escapeHtml(o.createdAt)}</span>
               <span><strong>${formatVND(o.total)}</strong> · +${o.pointsEarned} điểm</span>
             </div>
-          </li>`).join('') : '<li class="empty">Bạn chưa có đơn nào.</li>';
+          </li>`).join('')
+          : '<li class="empty">Bạn chưa có đơn nào.</li>';
       } catch (err) {
         $('orders').innerHTML = '<li class="empty">Không tải được lịch sử.</li>';
         handleError(err);

@@ -7,62 +7,82 @@
   <title>Brownies Lab · Đăng nhập</title>
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
-  <header class="topbar">
-    <div class="topbar-inner">
+<body class="auth-page">
+
+  <div class="auth-split">
+
+    <!-- ── Brand panel ── -->
+    <div class="auth-brand">
       <a class="brand" href="index.html">Brownies Lab<small>Bánh nướng theo đợt</small></a>
+
+      <div>
+        <h1>Đặt brownie,<br><span>tích điểm.</span></h1>
+        <p>Chọn món, gửi đơn, nhận điểm thưởng ngay sau mỗi lần đặt.</p>
+      </div>
+
+      <div class="badge-row">
+        <span class="auth-badge">🍫 Theo đợt</span>
+        <span class="auth-badge">⭐ Tích điểm</span>
+        <span class="auth-badge">📦 Đặt trước</span>
+      </div>
     </div>
-  </header>
 
-  <main>
-    <section class="auth-hero">
-      <h1>Đặt brownie, tích điểm.</h1>
-      <p>Dùng số điện thoại và mã PIN của bạn để đặt bánh cho đợt này.</p>
-    </section>
+    <!-- ── Form panel ── -->
+    <div class="auth-form">
+      <h2>Chào mừng bạn!</h2>
 
-    <div class="tabs" role="tablist">
-      <button class="tab" role="tab" id="tab-login" aria-selected="true" aria-controls="form-login">Đăng nhập</button>
-      <button class="tab" role="tab" id="tab-register" aria-selected="false" aria-controls="form-register">Tạo tài khoản</button>
+      <div class="tabs" role="tablist" style="margin-bottom:1.5rem">
+        <button class="tab" role="tab" id="tab-login" aria-selected="true" aria-controls="form-login">Đăng nhập</button>
+        <button class="tab" role="tab" id="tab-register" aria-selected="false" aria-controls="form-register">Tạo tài khoản</button>
+      </div>
+
+      <form id="form-login" role="tabpanel" aria-labelledby="tab-login" novalidate>
+        <label class="field">
+          <span>Số điện thoại</span>
+          <input name="phone" type="tel" inputmode="tel" autocomplete="tel" required placeholder="09xx xxx xxx">
+        </label>
+        <label class="field">
+          <span>Mã PIN</span>
+          <input class="pin" name="pin" type="password" inputmode="numeric" autocomplete="current-password"
+                 pattern="\d{4,6}" minlength="4" maxlength="6" required placeholder="••••">
+        </label>
+        <button class="btn btn-primary btn-block" type="submit" style="margin-top:.25rem">Đăng nhập</button>
+        <p class="small muted" style="margin-top:.85rem">Quên PIN? Nhắn Brownies Lab để được đặt lại.</p>
+      </form>
+
+      <form id="form-register" role="tabpanel" aria-labelledby="tab-register" hidden novalidate>
+        <label class="field">
+          <span>Tên của bạn</span>
+          <input name="name" autocomplete="name" maxlength="60" required placeholder="Nguyễn Văn A">
+        </label>
+        <label class="field">
+          <span>Số điện thoại</span>
+          <input name="phone" type="tel" inputmode="tel" autocomplete="tel" required placeholder="09xx xxx xxx">
+          <div class="hint">Dùng để nhận diện và cộng điểm, không gửi tin nhắn.</div>
+        </label>
+        <label class="field">
+          <span>Mã PIN (4 đến 6 số)</span>
+          <input class="pin" name="pin" type="password" inputmode="numeric" autocomplete="new-password"
+                 pattern="\d{4,6}" minlength="4" maxlength="6" required placeholder="••••">
+        </label>
+        <label class="field">
+          <span>Nhập lại PIN</span>
+          <input class="pin" name="pin2" type="password" inputmode="numeric" autocomplete="new-password"
+                 pattern="\d{4,6}" minlength="4" maxlength="6" required placeholder="••••">
+        </label>
+        <button class="btn btn-primary btn-block" type="submit" style="margin-top:.25rem">Tạo tài khoản</button>
+      </form>
     </div>
 
-    <form id="form-login" role="tabpanel" aria-labelledby="tab-login" novalidate>
-      <label class="field"><span>Số điện thoại</span>
-        <input name="phone" type="tel" inputmode="tel" autocomplete="tel" required placeholder="09xx xxx xxx">
-      </label>
-      <label class="field"><span>Mã PIN</span>
-        <input class="pin" name="pin" type="password" inputmode="numeric" autocomplete="current-password"
-               pattern="\d{4,6}" minlength="4" maxlength="6" required>
-      </label>
-      <button class="btn btn-primary btn-block" type="submit">Đăng nhập</button>
-      <p class="small muted">Quên PIN? Nhắn Brownies Lab để được đặt lại.</p>
-    </form>
-
-    <form id="form-register" role="tabpanel" aria-labelledby="tab-register" hidden novalidate>
-      <label class="field"><span>Tên của bạn</span>
-        <input name="name" autocomplete="name" maxlength="60" required>
-      </label>
-      <label class="field"><span>Số điện thoại</span>
-        <input name="phone" type="tel" inputmode="tel" autocomplete="tel" required placeholder="09xx xxx xxx">
-        <div class="hint">Dùng để nhận diện bạn và cộng điểm, không gửi tin nhắn.</div>
-      </label>
-      <label class="field"><span>Tự đặt mã PIN (4 đến 6 số)</span>
-        <input class="pin" name="pin" type="password" inputmode="numeric" autocomplete="new-password"
-               pattern="\d{4,6}" minlength="4" maxlength="6" required>
-      </label>
-      <label class="field"><span>Nhập lại PIN</span>
-        <input class="pin" name="pin2" type="password" inputmode="numeric" autocomplete="new-password"
-               pattern="\d{4,6}" minlength="4" maxlength="6" required>
-      </label>
-      <button class="btn btn-primary btn-block" type="submit">Tạo tài khoản</button>
-    </form>
-  </main>
+  </div>
 
   <script src="app.js"></script>
   <script>
     if (Session.get()) location.replace('order.html');
 
-    const tabs = { login: document.getElementById('tab-login'), register: document.getElementById('tab-register') };
+    const tabs  = { login: document.getElementById('tab-login'), register: document.getElementById('tab-register') };
     const forms = { login: document.getElementById('form-login'), register: document.getElementById('form-register') };
+
     function show(which) {
       for (const k of Object.keys(tabs)) {
         tabs[k].setAttribute('aria-selected', String(k === which));
@@ -72,22 +92,16 @@
     tabs.login.addEventListener('click', () => show('login'));
     tabs.register.addEventListener('click', () => show('register'));
 
-    // Chỉ cho gõ số vào ô PIN
     document.querySelectorAll('input.pin').forEach(el =>
-      el.addEventListener('input', () => { el.value = el.value.replace(/\D/g, '').slice(0, 6); }));
+      el.addEventListener('input', () => { el.value = el.value.replace(/\D/g,'').slice(0,6); }));
 
     function checkPin(pin) {
       if (!/^\d{4,6}$/.test(pin)) throw new Error('PIN phải gồm 4 đến 6 chữ số.');
     }
-
-    function onSuccess(session) {
-      Session.set(session);
-      location.replace('order.html');
-    }
+    function onSuccess(session) { Session.set(session); location.replace('order.html'); }
 
     forms.login.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const f = e.target;
+      e.preventDefault(); const f = e.target;
       try {
         checkPin(f.pin.value);
         await withBusy(f.querySelector('button[type=submit]'), async () =>
@@ -96,8 +110,7 @@
     });
 
     forms.register.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const f = e.target;
+      e.preventDefault(); const f = e.target;
       try {
         if (!f.name.value.trim()) throw new Error('Vui lòng nhập tên.');
         checkPin(f.pin.value);
