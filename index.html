@@ -13,18 +13,26 @@
 
     <!-- ── Brand panel ── -->
     <div class="auth-brand">
-      <a class="brand" href="index.html">Brownies Lab<small>Bánh nướng theo đợt</small></a>
+      <div class="auth-bakes" aria-hidden="true">
+        <img class="auth-bake auth-bake-classic" src="assets/brownie-classic.png" alt="">
+        <img class="auth-bake auth-bake-matcha" src="assets/brownie-matcha.png" alt="">
+        <img class="auth-bake auth-bake-mix" src="assets/brownie-mix.png" alt="">
+      </div>
+
+      <a class="brand" href="index.html">
+        <span class="brand-logo" aria-hidden="true">B</span>
+        <span>Brownies Lab<small>Tested · Tasted · Perfected</small></span>
+      </a>
 
       <div>
-        <h1>Đặt brownie,<br><span>tích điểm.</span></h1>
+        <h1>Đặt brownies,<br><span>tích điểm ngay.</span></h1>
         <p>Chọn món, gửi đơn, nhận điểm thưởng ngay sau mỗi lần đặt.</p>
       </div>
 
-      <div class="badge-row">
-        <span class="auth-badge">🍫 Theo đợt</span>
-        <span class="auth-badge">⭐ Tích điểm</span>
-        <span class="auth-badge">📦 Đặt trước</span>
-      </div>
+      <nav class="social-row" aria-label="Mạng xã hội Brownies Lab">
+        <a class="social-link" href="https://www.instagram.com/brownies_labb/" target="_blank" rel="noopener noreferrer" aria-label="Instagram Brownies Lab">◎ <span>Instagram</span></a>
+        <a class="social-link" href="https://www.threads.com/@brownies_labb" target="_blank" rel="noopener noreferrer" aria-label="Threads Brownies Lab">@ <span>Threads</span></a>
+      </nav>
     </div>
 
     <!-- ── Form panel ── -->
