@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#442009">
+  <title>Brownies Lab · Thanh toán</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar"><div class="topbar-inner" style="max-width:48rem"><a class="brand" href="order.html?tab=history"><img class="topbar-logo" src="metadata/Logo.png" alt=""><span>Brownies Lab<small>Thanh toán</small></span></a><span class="spacer"></span><a class="linkbtn" href="order.html?tab=history">Đơn của tôi</a></div></header>
+  <main class="payment-wrap">
+    <div class="payment-card">
+      <p class="eyebrow">Bước 2 / 2</p><h1>Thanh toán đơn hàng</h1>
+      <p class="muted" id="payment-order">Đang tải thông tin đơn…</p>
+      <div id="payment-state" class="payment-state loading" style="height:3rem"></div>
+      <div id="payment-content" hidden>
+        <div class="qr-box" id="qr-box"></div>
+        <p class="small muted">Chuyển đúng số tiền, sau đó tải ảnh giao dịch để Brownies Lab xác nhận thanh toán.</p>
+        <label class="upload-box" for="payment-proof"><span>↑</span><strong>Chọn ảnh chuyển khoản</strong><small>JPG, PNG hoặc WEBP · tối đa 4 MB</small></label>
+        <input id="payment-proof" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+        <img id="proof-preview" class="proof-preview" alt="Xem trước ảnh chuyển khoản" hidden>
+        <button class="btn btn-primary btn-block" id="upload-proof" type="button" disabled>Gửi ảnh xác nhận thanh toán</button>
+      </div>
+      <a class="btn btn-block" href="order.html?tab=history" style="margin-top:.75rem">Xem đơn hàng của tôi</a>
+    </div>
+  </main>
+  <script src="app.js"></script>
+  <script>
+    const session = requireSession();
+    const $ = (id) => document.getElementById(id);
+    const orderId = new URLSearchParams(location.search).get('order');
+    let payment = null, file = null;
+    if (!session || !orderId) location.replace('order.html');
+
+    function renderPayment(data) {
+      payment = data;
+      $('payment-order').textContent = `Tổng thanh toán: ${formatVND(data.total)}`;
+      $('payment-state').className = 'payment-state';
+      $('payment-state').textContent = `Trạng thái thanh toán: ${data.paymentStatus}`;
+      $('payment-content').hidden = false;
+      const qrUrl = data.qrUrl || 'metadata/qr.jpg';
+      $('qr-box').innerHTML = `<img src="${escapeHtml(qrUrl)}" alt="Mã QR thanh toán"><span>Quét mã QR để thanh toán ${formatVND(data.total)}</span>`;
+      if (data.proofUrl) { $('payment-state').innerHTML = `Trạng thái thanh toán: <strong>${escapeHtml(data.paymentStatus)}</strong> · <a href="${escapeHtml(data.proofUrl)}" target="_blank" rel="noopener noreferrer">Xem ảnh đã gửi</a>`; }
+    }
+    async function init() { try { renderPayment(await api('paymentInfo', { orderId })); } catch (err) { $('payment-state').className = 'empty'; $('payment-state').textContent = err.message; handleError(err); } }
+
+    $('payment-proof').addEventListener('change', (e) => {
+      file = e.target.files[0] || null;
+      if (!file) return;
+      if (file.size > 4 * 1024 * 1024) { file = null; e.target.value = ''; return handleError(new Error('Ảnh chuyển khoản phải nhỏ hơn 4 MB.')); }
+      $('proof-preview').src = URL.createObjectURL(file); $('proof-preview').hidden = false; $('upload-proof').disabled = false;
+    });
+    $('upload-proof').addEventListener('click', () => {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const result = await withBusy($('upload-proof'), () => api('uploadPaymentProof', {
+            orderId, filename: file.name, mimeType: file.type, base64: String(reader.result).split(',')[1]
+          }), 'Đang gửi ảnh…');
+          payment.paymentStatus = result.paymentStatus; payment.proofUrl = result.proofUrl; renderPayment(payment);
+          toast('Đã gửi ảnh. Brownies Lab sẽ xác nhận thanh toán sớm.', 'success');
+        } catch (err) { handleError(err); }
+      };
+      reader.readAsDataURL(file);
+    });
+    if (session && orderId) init();
+  </script>
+</body>
+</html>

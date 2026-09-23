@@ -99,45 +99,132 @@
       return v === null || v === undefined ? '' : String(v);
     }
 
+    function cellHtml(header, value) {
+      const text = cellText(value);
+      if (current === 'Orders' && header === 'ItemsJSON') return escapeHtml(orderItemsTextFromValue(text));
+      if (current === 'Orders' && header === 'PaymentProofUrl' && /^https?:\/\//i.test(text)) {
+        return `<a class="grid-link" href="${escapeHtml(text)}" target="_blank" rel="noopener noreferrer">Xem ảnh</a>`;
+      }
+      return escapeHtml(text);
+    }
+
+    function orderValue(row, header) {
+      const i = table.headers.indexOf(header);
+      return i < 0 ? '' : cellText(row.values[i]);
+    }
+
+    function orderItemsTextFromValue(value) {
+      try {
+        const items = JSON.parse(value || '[]');
+        return items.map(i => `${i.name || i.itemId || 'Bánh'} × ${Number(i.qty) || 0}`).join(', ') || '—';
+      } catch (e) { return value || '—'; }
+    }
+
+    function orderItemsText(row) { return orderItemsTextFromValue(orderValue(row, 'ItemsJSON')); }
+
+    function fieldLabel(header) {
+      const labels = {
+        Status: 'Trạng thái đơn', Note: 'Ghi chú đơn', Phone: 'Số điện thoại',
+        Name: 'Họ và tên', Points: 'Điểm thưởng', IsAdmin: 'Quyền quản trị',
+        CreatedAt: 'Ngày tạo', SocialLink: 'Liên kết mạng xã hội',
+        ItemID: 'Mã món', Description: 'Mô tả', Active: 'Đang bán', Price: 'Giá bán',
+        Token: 'Mã phiên', ExpiresAt: 'Hết hạn'
+      };
+      return labels[header] || header;
+    }
+
+    function needsPaymentConfirmation(row) {
+      if (current !== 'Orders') return false;
+      const method = orderValue(row, 'PaymentMethod');
+      const status = orderValue(row, 'PaymentStatus');
+      const proof = orderValue(row, 'PaymentProofUrl');
+      const credited = /^true$/i.test(orderValue(row, 'PointsCredited'));
+      const cancelled = /huỷ|hủy|cancel/i.test(orderValue(row, 'Status') + ' ' + status);
+      if (credited || cancelled) return false;
+      if (method === 'Thanh toán trước') return Boolean(proof) && /chờ xác nhận|đã thanh toán/i.test(status);
+      return method === 'Thanh toán khi nhận hàng';
+    }
+
+    function renderOrderRefs(rows) {
+      const body = rows.length ? rows.map(r => {
+        const proof = orderValue(r, 'PaymentProofUrl');
+        return `<tr class="order-ref-row" data-row="${r.rowIndex}"><td colspan="2">
+          <button class="order-ref" type="button" data-edit="${r.rowIndex}">
+            <span class="order-ref-top"><strong>${escapeHtml(orderValue(r, 'CustomerName') || 'Khách hàng')}</strong><span class="status">${escapeHtml(orderValue(r, 'Status') || '—')}</span></span>
+            <span class="order-ref-meta">${escapeHtml(orderValue(r, 'Phone'))} · ${escapeHtml(orderValue(r, 'CreatedAt'))}</span>
+            <span class="order-ref-items">${escapeHtml(orderItemsText(r))}</span>
+            <span class="order-ref-total">${formatVND(orderValue(r, 'Total'))} · ${/^true$/i.test(orderValue(r, 'PointsCredited')) ? 'Đã cộng' : 'Chờ cộng'} +${escapeHtml(orderValue(r, 'PointsEarned'))} điểm</span>
+          </button>
+          <span class="order-ref-actions"><span class="status payment">${escapeHtml(orderValue(r, 'PaymentMethod') || 'Chưa chọn')} · ${escapeHtml(orderValue(r, 'PaymentStatus') || 'Chưa thanh toán')}</span>${proof ? `<a class="btn btn-sm" href="${escapeHtml(proof)}" target="_blank" rel="noopener noreferrer">Xem ảnh</a>` : ''}${needsPaymentConfirmation(r) ? `<button class="btn btn-sm btn-dark" type="button" data-confirm-payment="${r.rowIndex}">Xác nhận TT &amp; cộng điểm</button>` : ''}</span>
+        </td></tr>`;
+      }).join('') : '<tr><td class="empty" colspan="2">Không có đơn nào.</td></tr>';
+      $('grid').innerHTML = '<tbody>' + body + '</tbody>';
+    }
+
     function render() {
+      $('add').hidden = current === 'Orders';
       const q = $('search').value.trim().toLowerCase();
       const rows = q ? table.rows.filter(r => r.values.some(v => cellText(v).toLowerCase().includes(q))) : table.rows;
       $('meta').textContent = `${LABELS[current]} · ${rows.length}/${table.rows.length} dòng · bấm vào một dòng để sửa`;
+      if (current === 'Orders') { renderOrderRefs(rows); return; }
       const head = `<thead><tr><th>#</th>${table.headers.map(h => `<th>${escapeHtml(h||'(trống)')}</th>`).join('')}<th></th></tr></thead>`;
       const body = rows.length
         ? rows.map(r => `
           <tr data-row="${r.rowIndex}">
             <td class="rownum">${r.rowIndex}</td>
-            ${table.headers.map((h,i) => `<td title="${escapeHtml(cellText(r.values[i]))}">${escapeHtml(cellText(r.values[i]))}</td>`).join('')}
-            <td class="actions"><button class="btn btn-sm" type="button" data-edit="${r.rowIndex}">Sửa</button></td>
+            ${table.headers.map((h,i) => `<td title="${escapeHtml(cellText(r.values[i]))}">${cellHtml(h, r.values[i])}</td>`).join('')}
+            <td class="actions">${needsPaymentConfirmation(r) ? `<button class="btn btn-sm btn-dark" type="button" data-confirm-payment="${r.rowIndex}">Xác nhận TT &amp; cộng điểm</button>` : ''}<button class="btn btn-sm" type="button" data-edit="${r.rowIndex}">Sửa</button></td>
           </tr>`).join('')
         : `<tr><td class="empty" colspan="${table.headers.length+2}">Không có dòng nào.</td></tr>`;
       $('grid').innerHTML = head + '<tbody>' + body + '</tbody>';
     }
 
     $('grid').addEventListener('click', (e) => {
+      if (e.target.closest('a')) return;
+      const confirmPayment = e.target.closest('[data-confirm-payment]');
+      if (confirmPayment) { confirmPaymentForRow(Number(confirmPayment.dataset.confirmPayment), confirmPayment); return; }
       const tr = e.target.closest('tr[data-row]');
       if (!tr) return;
       openEditor(table.rows.find(r => r.rowIndex === Number(tr.dataset.row)));
     });
 
+    $('editor-fields').addEventListener('click', (e) => {
+      const confirmPayment = e.target.closest('[data-confirm-payment]');
+      if (confirmPayment) confirmPaymentForRow(Number(confirmPayment.dataset.confirmPayment), confirmPayment);
+    });
+
+    async function confirmPaymentForRow(rowIndex, button) {
+      const row = table.rows.find(r => r.rowIndex === rowIndex);
+      const points = orderValue(row, 'PointsEarned');
+      if (!row || !confirm(`Xác nhận khách đã thanh toán đơn này? Hệ thống sẽ cộng +${points} điểm đúng một lần.`)) return;
+      try {
+        const r = await withBusy(button, () => api('adminConfirmPayment', {
+          rowIndex, matchKey: cellText(row.values[0])
+        }), 'Đang xác nhận…');
+        toast(r.credited ? `Đã xác nhận thanh toán và cộng +${points} điểm.` : 'Đơn này đã được cộng điểm trước đó.', 'success'); load();
+      } catch (err) { handleError(err); }
+    }
+
     function openEditor(row) {
       editing = row;
       $('editor-title').textContent = row
-        ? `Sửa dòng ${row.rowIndex} · ${LABELS[current]}`
+        ? (current === 'Orders' ? `Chi tiết đơn · ${orderValue(row, 'CustomerName') || 'Khách hàng'}` : `Sửa dòng ${row.rowIndex} · ${LABELS[current]}`)
         : `Thêm dòng · ${LABELS[current]}`;
       $('editor-delete').hidden = !row;
-      $('editor-fields').innerHTML = table.headers.map((h,i) => {
+      const orderDetail = current === 'Orders' && row ? `<div class="order-detail"><p><strong>Khách đặt:</strong> ${escapeHtml(orderValue(row, 'CustomerName'))} · ${escapeHtml(orderValue(row, 'Phone'))}</p><p><strong>Người nhận:</strong> ${escapeHtml(orderValue(row, 'RecipientName'))} · ${escapeHtml(orderValue(row, 'RecipientPhone'))}</p><p><strong>Đơn bánh:</strong> ${escapeHtml(orderItemsText(row))} · <strong>${formatVND(orderValue(row, 'Total'))}</strong></p><p><strong>Nhận hàng:</strong> ${escapeHtml(orderValue(row, 'FulfillmentType'))} · ${escapeHtml(orderValue(row, 'PickupDate'))} · ${escapeHtml(orderValue(row, 'PickupTime'))}</p>${orderValue(row, 'PickupLocation') ? `<p><strong>Điểm nhận:</strong> ${escapeHtml(orderValue(row, 'PickupLocation'))}</p>` : ''}${orderValue(row, 'DeliveryAddress') ? `<p><strong>Địa chỉ giao:</strong> ${escapeHtml(orderValue(row, 'DeliveryAddress'))}</p>` : ''}${orderValue(row, 'RecipientMessage') ? `<p><strong>Lời nhắn người nhận:</strong> ${escapeHtml(orderValue(row, 'RecipientMessage'))}</p>` : ''}${orderValue(row, 'Note') ? `<p><strong>Ghi chú đơn:</strong> ${escapeHtml(orderValue(row, 'Note'))}</p>` : ''}<p><strong>Thanh toán:</strong> ${escapeHtml(orderValue(row, 'PaymentMethod'))} · ${escapeHtml(orderValue(row, 'PaymentStatus'))} · ${/^true$/i.test(orderValue(row, 'PointsCredited')) ? 'Đã cộng điểm' : 'Chưa cộng điểm'}</p>${orderValue(row, 'PaymentProofUrl') ? `<p><a class="grid-link" href="${escapeHtml(orderValue(row, 'PaymentProofUrl'))}" target="_blank" rel="noopener noreferrer">Xem ảnh chuyển khoản</a></p>` : ''}${needsPaymentConfirmation(row) ? `<button class="btn btn-primary btn-sm" type="button" data-confirm-payment="${row.rowIndex}">Xác nhận thanh toán &amp; cộng điểm</button>` : ''}</div>` : '';
+      $('editor-fields').innerHTML = orderDetail + table.headers.map((h,i) => {
         if (!h) return '';
+        if (current === 'Orders' && row && h !== 'Status') return '';
         const v    = row ? cellText(row.values[i]) : '';
         const long = v.length > 60 || /json|note|description/i.test(h);
         const inp  = long
           ? `<textarea name="${escapeHtml(h)}" rows="4">${escapeHtml(v)}</textarea>`
           : `<input name="${escapeHtml(h)}" value="${escapeHtml(v)}">`;
-        return `<label class="field"><span>${escapeHtml(h)}</span>${inp}</label>`;
+        return `<label class="field"><span>${escapeHtml(fieldLabel(h))}</span>${inp}</label>`;
       }).join('');
       $('editor-hint').textContent = current === 'Users'
         ? 'Mẹo: nhập PIN mới 4–6 số vào ô PinHash để đặt lại PIN. Đúng/sai nhập TRUE/FALSE.'
+        : current === 'Orders' ? 'Chỉ sửa trạng thái đơn tại đây. Thanh toán và điểm được xác nhận bằng nút “Xác nhận TT & cộng điểm” ở thẻ đơn.'
         : 'Đúng/sai nhập TRUE/FALSE, ngày nhập dạng yyyy-mm-dd hh:mm.';
       $('editor').showModal();
     }

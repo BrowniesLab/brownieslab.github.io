@@ -11,23 +11,29 @@
 // (cùng tên khoá) mà không phải sửa code.
 var DEFAULTS = {
   PIN_SALT: 'BrowniesLab::doi-chuoi-nay-truoc-khi-deploy',
-  POINT_UNIT_VND: 10000,   // cứ mỗi POINT_UNIT_VND đồng ...
-  POINTS_PER_UNIT: 1,      // ... thì được POINTS_PER_UNIT điểm
+  POINTS_PER_BOX: 1,       // mỗi hộp bánh được bấy nhiêu điểm
+  FIRST_ORDER_BONUS: 2,    // thưởng thêm cho đơn đầu tiên của mỗi khách
+  FREE_BOX_POINTS: 10,     // số điểm đổi một hộp miễn phí
   SESSION_DAYS: 30,        // hạn của token đăng nhập
   MAX_LOGIN_FAILS: 5,      // sai PIN quá số lần này thì khoá tạm
   LOCK_MINUTES: 15,
-  NEW_ORDER_STATUS: 'Mới'
+  NEW_ORDER_STATUS: 'Mới',
+  PAYMENT_QR_URL: ''
 };
 
 var SHEETS = {
   Users:    ['Phone', 'Name', 'PinHash', 'Points', 'IsAdmin', 'CreatedAt', 'SocialLink'],
   Menu:     ['ItemID', 'Name', 'Price', 'Description', 'Active'],
-  Orders:   ['OrderID', 'Phone', 'CustomerName', 'ItemsJSON', 'Total', 'PointsEarned', 'Status', 'CreatedAt', 'Note'],
+  Orders:   ['OrderID', 'Phone', 'CustomerName', 'ItemsJSON', 'Total', 'PointsEarned', 'PointsCredited', 'Status', 'CreatedAt', 'Note',
+             'RecipientName', 'RecipientPhone', 'RecipientMessage', 'FulfillmentType', 'PickupLocation',
+             'DeliveryAddress', 'PickupDate', 'PickupTime', 'PaymentMethod', 'PaymentStatus', 'PaymentProofUrl'],
   Sessions: ['Token', 'Phone', 'ExpiresAt']
 };
 
 // Cột luôn lưu dạng chữ (giữ số 0 đầu SĐT, không để Sheets tự đổi thành số/ngày)
-var TEXT_COLUMNS = ['Phone', 'PinHash', 'Token', 'OrderID', 'ItemID', 'ItemsJSON', 'Note', 'Name', 'CustomerName', 'Description', 'Status', 'SocialLink'];
+var TEXT_COLUMNS = ['Phone', 'PinHash', 'Token', 'OrderID', 'ItemID', 'ItemsJSON', 'Note', 'Name', 'CustomerName', 'Description', 'Status', 'SocialLink',
+  'RecipientName', 'RecipientPhone', 'RecipientMessage', 'FulfillmentType', 'PickupLocation', 'DeliveryAddress',
+  'PickupDate', 'PickupTime', 'PaymentMethod', 'PaymentStatus', 'PaymentProofUrl'];
 
 function cfg_(key) {
   var v = PropertiesService.getScriptProperties().getProperty(key);
@@ -61,10 +67,14 @@ var ACTIONS = {
   login:          function (b) { return login_(b.phone, b.pin); },
   logout:         function (b) { return withLock_(function () { return logout_(b.token); }); },
   getMenu:        function ()  { return getMenu_(); },
-  createOrder:    function (b) { return withLock_(function () { return createOrder_(b.token, b.items, b.note); }); },
+  createOrder:    function (b) { return withLock_(function () { return createOrder_(b.token, b.items, b.checkout || {}); }); },
+  cancelOrder:    function (b) { return withLock_(function () { return cancelOrder_(b.token, b.orderId); }); },
   myOrders:       function (b) { return myOrders_(b.token); },
   myPoints:       function (b) { return myPoints_(b.token); },
+  paymentInfo:    function (b) { return paymentInfo_(b.token, b.orderId); },
+  uploadPaymentProof: function (b) { return withLock_(function () { return uploadPaymentProof_(b.token, b.orderId, b.filename, b.mimeType, b.base64); }); },
   adminListSheet: function (b) { return adminListSheet_(b.token, b.sheet); },
+  adminConfirmPayment: function (b) { return withLock_(function () { return adminConfirmPayment_(b.token, b.rowIndex, b.matchKey); }); },
   adminAddRow:    function (b) { return withLock_(function () { return adminAddRow_(b.token, b.sheet, b.data); }); },
   adminUpdateRow: function (b) { return withLock_(function () { return adminUpdateRow_(b.token, b.sheet, b.rowIndex, b.data, b.matchKey); }); },
   adminDeleteRow: function (b) { return withLock_(function () { return adminDeleteRow_(b.token, b.sheet, b.rowIndex, b.matchKey); }); }
@@ -221,15 +231,70 @@ function getMenu_() {
     });
 }
 
-function pointsFor_(total) {
-  var unit = cfg_('POINT_UNIT_VND');
-  if (!(unit > 0)) return 0;
-  return Math.floor(total / unit) * cfg_('POINTS_PER_UNIT');
+function pointsFor_(lines, isFirstOrder) {
+  var boxes = lines.reduce(function (sum, line) { return sum + Number(line.qty || 0); }, 0);
+  return boxes * cfg_('POINTS_PER_BOX') + (isFirstOrder ? cfg_('FIRST_ORDER_BONUS') : 0);
 }
 
-function createOrder_(token, items, note) {
+function hasOrdered_(phone) {
+  return table_('Orders').objects.some(function (o) {
+    return safePhone_(o.obj.Phone) === phone && !isCancelledStatus_(o.obj.Status);
+  });
+}
+
+function isCancelledStatus_(status) {
+  return /huỷ|hủy|cancel/i.test(String(status || ''));
+}
+
+function canCancelOrder_(status, paymentStatus, paymentMethod) {
+  if (isCancelledStatus_(status) || isCancelledStatus_(paymentStatus)) return false;
+  // Khách được huỷ cho đến khi Brownies Lab xác nhận đã nhận tiền.
+  // Áp dụng cho cả COD và trả trước; đơn đã giao/hoàn thành cũng không huỷ online.
+  if (isPaidStatus_(paymentStatus)) return false;
+  if (/đã giao|hoàn thành|completed|done/i.test(String(status || ''))) return false;
+  return true;
+}
+
+function canPayOrder_(status, paymentStatus, paymentMethod) {
+  return String(paymentMethod || '') === 'Thanh toán trước' &&
+    !isCancelledStatus_(status) && !isCancelledStatus_(paymentStatus) &&
+    !/đã thanh toán|paid/i.test(String(paymentStatus || ''));
+}
+
+function checkoutData_(user, phone, checkout) {
+  var c = checkout || {};
+  var sameRecipient = c.sameRecipient !== false;
+  var recipientName = sameRecipient ? String(user.obj.Name || '') : String(c.recipientName || '').trim();
+  var recipientPhone = sameRecipient ? phone : normPhone_(c.recipientPhone);
+  var fulfillmentType = c.fulfillmentType === 'delivery' ? 'Giao tận nơi' : 'Nhận tại NEU';
+  var pickupLocation = String(c.pickupLocation || '').trim().slice(0, 300);
+  var deliveryAddress = String(c.deliveryAddress || '').trim().slice(0, 500);
+  var pickupDate = String(c.pickupDate || '').trim().slice(0, 60);
+  var pickupTime = String(c.pickupTime || '').trim().slice(0, 80);
+  var paymentMethod = c.paymentMethod === 'prepaid' ? 'Thanh toán trước' : 'Thanh toán khi nhận hàng';
+  var note = String(c.note || '').trim().slice(0, 500);
+  var recipientMessage = String(c.recipientMessage || '').trim().slice(0, 300);
+
+  if (!recipientName) throw new Error('Vui lòng nhập họ tên người nhận.');
+  if (!pickupDate || !pickupTime) throw new Error('Vui lòng chọn ngày và thời gian nhận bánh.');
+  if (fulfillmentType === 'Nhận tại NEU' && !pickupLocation) {
+    throw new Error('Vui lòng ghi toà nhà, phòng hoặc giảng đường nhận bánh tại NEU.');
+  }
+  if (fulfillmentType === 'Giao tận nơi' && !deliveryAddress) {
+    throw new Error('Vui lòng ghi địa chỉ giao bánh.');
+  }
+  return {
+    RecipientName: recipientName, RecipientPhone: recipientPhone, RecipientMessage: recipientMessage,
+    FulfillmentType: fulfillmentType, PickupLocation: pickupLocation, DeliveryAddress: deliveryAddress,
+    PickupDate: pickupDate, PickupTime: pickupTime, PaymentMethod: paymentMethod, Note: note
+  };
+}
+
+function createOrder_(token, items, checkout) {
   var user = requireUser_(token);
+  var phone = normPhone_(user.obj.Phone);
   if (!Array.isArray(items) || !items.length) throw new Error('Giỏ hàng đang trống.');
+  var checkoutData = checkoutData_(user, phone, checkout);
 
   var menu = {};
   getMenu_().forEach(function (m) { menu[m.itemId] = m; });
@@ -247,31 +312,38 @@ function createOrder_(token, items, note) {
     total += menu[id].price * qty;
   });
 
-  var earned = pointsFor_(total);
+  var isFirstOrder = !hasOrdered_(phone);
+  var earned = pointsFor_(lines, isFirstOrder);
   var orderId = 'BL' + Utilities.formatDate(new Date(), tz_(), 'yyMMdd-HHmmss') + '-' +
     Math.random().toString(36).slice(2, 5).toUpperCase();
   var order = {
     OrderID: orderId,
-    Phone: normPhone_(user.obj.Phone),
+    Phone: phone,
     CustomerName: String(user.obj.Name || ''),
     ItemsJSON: JSON.stringify(lines),
     Total: total,
     PointsEarned: earned,
+    PointsCredited: false,
     Status: cfg_('NEW_ORDER_STATUS'),
     CreatedAt: new Date(),
-    Note: String(note || '').slice(0, 500)
+    Note: checkoutData.Note,
+    RecipientName: checkoutData.RecipientName,
+    RecipientPhone: checkoutData.RecipientPhone,
+    RecipientMessage: checkoutData.RecipientMessage,
+    FulfillmentType: checkoutData.FulfillmentType,
+    PickupLocation: checkoutData.PickupLocation,
+    DeliveryAddress: checkoutData.DeliveryAddress,
+    PickupDate: checkoutData.PickupDate,
+    PickupTime: checkoutData.PickupTime,
+    PaymentMethod: checkoutData.PaymentMethod,
+    PaymentStatus: checkoutData.PaymentMethod === 'Thanh toán trước' ? 'Cần gửi minh chứng' : 'Thanh toán khi nhận hàng',
+    PaymentProofUrl: ''
   };
   appendObject_(table_('Orders'), order);
 
-  // Cộng điểm ngay khi đặt đơn
-  var users = table_('Users');
-  var pointsCol = users.headers.indexOf('Points') + 1;
-  var newPoints = (Number(user.obj.Points) || 0) + earned;
-  users.sheet.getRange(user.row, pointsCol).setValue(newPoints);
-
   onOrderCreated_(order, lines);
 
-  return { orderId: orderId, total: total, pointsEarned: earned, points: newPoints };
+  return { orderId: orderId, total: total, pointsEarned: earned, points: Number(user.obj.Points) || 0, isFirstOrder: isFirstOrder, paymentMethod: checkoutData.PaymentMethod };
 }
 
 /**
@@ -279,6 +351,111 @@ function createOrder_(token, items, note) {
  * Hiện chưa làm gì — sẽ được viết khi đã thống nhất cấu trúc các sheet đó.
  */
 function onOrderCreated_(order, lines) {
+}
+
+function requireCustomerOrder_(token, orderId) {
+  var user = requireUser_(token);
+  var t = table_('Orders');
+  var found = findRow_(t, 'OrderID', String(orderId || ''));
+  if (!found || safePhone_(found.obj.Phone) !== normPhone_(user.obj.Phone)) {
+    throw new Error('Không tìm thấy đơn hàng.');
+  }
+  return { user: user, table: t, found: found };
+}
+
+function cancelOrder_(token, orderId) {
+  var ref = requireCustomerOrder_(token, orderId);
+  var order = ref.found;
+  if (!canCancelOrder_(order.obj.Status, order.obj.PaymentStatus, order.obj.PaymentMethod)) {
+    throw new Error('Đơn này không thể huỷ online. Vui lòng nhắn Brownies Lab để được hỗ trợ.');
+  }
+  writeCell_(ref.table.sheet.getRange(order.row, ref.table.headers.indexOf('Status') + 1), 'Status', 'Đã huỷ');
+  writeCell_(ref.table.sheet.getRange(order.row, ref.table.headers.indexOf('PaymentStatus') + 1), 'PaymentStatus', 'Đã huỷ');
+
+  var newPoints = Number(ref.user.obj.Points) || 0;
+  if (isTrue_(order.obj.PointsCredited)) {
+    var users = table_('Users');
+    var pointsCol = users.headers.indexOf('Points') + 1;
+    newPoints = Math.max(0, newPoints - (Number(order.obj.PointsEarned) || 0));
+    users.sheet.getRange(ref.user.row, pointsCol).setValue(newPoints);
+  }
+  return { orderId: String(order.obj.OrderID), points: newPoints };
+}
+
+function isPaidStatus_(status) { return /đã thanh toán|paid/i.test(String(status || '')); }
+
+function creditPointsForOrder_(orders, row, order) {
+  if (isTrue_(order.PointsCredited)) return { credited: false, points: null };
+  var user = findRow_(table_('Users'), 'Phone', normPhone_(order.Phone), normPhone_);
+  if (!user) throw new Error('Không tìm thấy khách hàng để cộng điểm.');
+  var users = table_('Users');
+  var pointsCol = users.headers.indexOf('Points') + 1;
+  var newPoints = (Number(user.obj.Points) || 0) + (Number(order.PointsEarned) || 0);
+  users.sheet.getRange(user.row, pointsCol).setValue(newPoints);
+  writeCell_(orders.sheet.getRange(row, orders.headers.indexOf('PointsCredited') + 1), 'PointsCredited', true);
+  return { credited: true, points: newPoints };
+}
+
+function adminConfirmPayment_(token, rowIndex, matchKey) {
+  requireAdmin_(token);
+  var orders = table_('Orders');
+  var row = checkRow_(orders, rowIndex, matchKey);
+  var order = rowToObj_(orders.headers, orders.rows[row - 2]);
+  if (isCancelledStatus_(order.Status) || isCancelledStatus_(order.PaymentStatus)) throw new Error('Không thể xác nhận thanh toán cho đơn đã huỷ.');
+  var method = String(order.PaymentMethod || '');
+  if (method === 'Thanh toán trước') {
+    if (!String(order.PaymentProofUrl || '')) throw new Error('Khách chưa gửi ảnh minh chứng thanh toán.');
+    if (!/chờ xác nhận|đã thanh toán/i.test(String(order.PaymentStatus || ''))) throw new Error('Ảnh thanh toán chưa ở trạng thái chờ xác nhận.');
+  } else if (method !== 'Thanh toán khi nhận hàng') {
+    throw new Error('Đơn chưa có phương thức thanh toán hợp lệ.');
+  }
+  if (!isPaidStatus_(order.PaymentStatus)) {
+    writeCell_(orders.sheet.getRange(row, orders.headers.indexOf('PaymentStatus') + 1), 'PaymentStatus', 'Đã thanh toán');
+  }
+  var credited = creditPointsForOrder_(orders, row, order);
+  return { orderId: String(order.OrderID), points: credited.points, credited: credited.credited };
+}
+
+function paymentInfo_(token, orderId) {
+  var ref = requireCustomerOrder_(token, orderId);
+  var o = ref.found.obj;
+  return {
+    orderId: String(o.OrderID), total: Number(o.Total) || 0,
+    paymentStatus: String(o.PaymentStatus || 'Chưa thanh toán'),
+    paymentMethod: String(o.PaymentMethod || 'Thanh toán trước'),
+    proofUrl: String(o.PaymentProofUrl || ''),
+    qrUrl: String(cfg_('PAYMENT_QR_URL') || '')
+  };
+}
+
+function paymentProofFolder_() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('PAYMENT_PROOF_FOLDER_ID');
+  if (id) {
+    try { return DriveApp.getFolderById(id); } catch (e) {}
+  }
+  var folder = DriveApp.createFolder('Brownies Lab - Payment Proofs');
+  props.setProperty('PAYMENT_PROOF_FOLDER_ID', folder.getId());
+  return folder;
+}
+
+function uploadPaymentProof_(token, orderId, filename, mimeType, base64) {
+  var ref = requireCustomerOrder_(token, orderId);
+  if (isCancelledStatus_(ref.found.obj.Status)) throw new Error('Không thể tải ảnh cho đơn đã huỷ.');
+  if (String(ref.found.obj.PaymentMethod || '') !== 'Thanh toán trước') throw new Error('Đơn này thanh toán khi nhận hàng, không cần gửi minh chứng.');
+  var allowed = ['image/jpeg', 'image/png', 'image/webp'];
+  if (allowed.indexOf(String(mimeType || '').toLowerCase()) < 0) throw new Error('Chỉ nhận ảnh JPG, PNG hoặc WEBP.');
+  var bytes = Utilities.base64Decode(String(base64 || ''));
+  if (!bytes.length || bytes.length > 4 * 1024 * 1024) throw new Error('Ảnh chuyển khoản phải nhỏ hơn 4 MB.');
+
+  var safeName = String(filename || 'payment-proof').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+  var blob = Utilities.newBlob(bytes, mimeType, String(ref.found.obj.OrderID) + '-' + safeName);
+  var file = paymentProofFolder_().createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  var url = file.getUrl();
+  writeCell_(ref.table.sheet.getRange(ref.found.row, ref.table.headers.indexOf('PaymentProofUrl') + 1), 'PaymentProofUrl', url);
+  writeCell_(ref.table.sheet.getRange(ref.found.row, ref.table.headers.indexOf('PaymentStatus') + 1), 'PaymentStatus', 'Chờ xác nhận thanh toán');
+  return { proofUrl: url, paymentStatus: 'Chờ xác nhận thanh toán' };
 }
 
 function myOrders_(token) {
@@ -294,7 +471,12 @@ function myOrders_(token) {
         items: items,
         total: Number(o.obj.Total) || 0,
         pointsEarned: Number(o.obj.PointsEarned) || 0,
+        pointsCredited: isTrue_(o.obj.PointsCredited),
         status: String(o.obj.Status || ''),
+        paymentMethod: String(o.obj.PaymentMethod || 'Chưa chọn'),
+        paymentStatus: String(o.obj.PaymentStatus || 'Chưa thanh toán'),
+        canCancel: canCancelOrder_(o.obj.Status, o.obj.PaymentStatus, o.obj.PaymentMethod),
+        canPay: canPayOrder_(o.obj.Status, o.obj.PaymentStatus, o.obj.PaymentMethod),
         createdAt: fmtDate_(o.obj.CreatedAt),
         note: String(o.obj.Note || '')
       };
@@ -304,11 +486,17 @@ function myOrders_(token) {
 
 function myPoints_(token) {
   var u = requireUser_(token);
+  var hasOrdered = hasOrdered_(normPhone_(u.obj.Phone));
   return {
     points: Number(u.obj.Points) || 0,
     name: String(u.obj.Name || ''),
     isAdmin: isTrue_(u.obj.IsAdmin),
-    rule: { unitVnd: cfg_('POINT_UNIT_VND'), pointsPerUnit: cfg_('POINTS_PER_UNIT') }
+    hasOrdered: hasOrdered,
+    rule: {
+      pointsPerBox: cfg_('POINTS_PER_BOX'),
+      firstOrderBonus: cfg_('FIRST_ORDER_BONUS'),
+      freeBoxPoints: cfg_('FREE_BOX_POINTS')
+    }
   };
 }
 
@@ -341,6 +529,9 @@ function adminAddRow_(token, sheet, data) {
 function adminUpdateRow_(token, sheet, rowIndex, data, matchKey) {
   requireAdmin_(token);
   var t = adminSheet_(sheet);
+  if (sheet === 'Orders' && ['PointsEarned', 'PointsCredited', 'PaymentMethod', 'PaymentStatus'].some(function (key) { return Object.prototype.hasOwnProperty.call(data || {}, key); })) {
+    throw new Error('Dùng nút “Xác nhận TT & cộng điểm” để xác nhận thanh toán và cộng điểm.');
+  }
   var row = checkRow_(t, rowIndex, matchKey);
   var current = rowToObj_(t.headers, t.rows[row - 2]);
   var obj = prepareAdminData_(t, sheet, data || {}, current);

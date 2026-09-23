@@ -10,7 +10,10 @@
 <body>
   <header class="topbar">
     <div class="topbar-inner" style="max-width:68rem">
-      <a class="brand" href="order.html">Brownies Lab<small id="hello">Xin chào</small></a>
+      <a class="brand" href="order.html">
+        <img class="topbar-logo" src="metadata/Logo.png" alt="">
+        <span>Brownies Lab<small id="hello">Xin chào</small></span>
+      </a>
       <span class="spacer"></span>
       <a class="linkbtn" id="admin-link" href="admin.html" hidden>Quản trị</a>
       <button class="linkbtn" id="logout" type="button">Đăng xuất</button>
@@ -18,6 +21,19 @@
   </header>
 
   <div class="order-wrap">
+    <section class="order-info" aria-label="Thông tin đợt đặt bánh">
+      <div class="order-info-head">
+        <p class="eyebrow">Đợt brownie tuần này</p>
+        <h1>Lịch nhận bánh &amp; giao hàng</h1>
+      </div>
+      <div class="order-info-grid">
+        <p><strong>Mở đơn đặt trước</strong><span>Đặt sớm để Brownies Lab chuẩn bị bánh mới cho bạn.</span></p>
+        <p><strong>Ngày trả bánh</strong><span>Thứ 2 và Thứ 6 hằng tuần</span></p>
+        <p><strong>Khung giờ nhận</strong><span>Sáng 10–11h · Trưa 12–13h · Chiều 15–16h</span></p>
+        <p><strong>Giao hàng</strong><span>Freeship trong bán kính 3 km quanh NEU · ngoài bán kính +5.000đ/km</span></p>
+      </div>
+    </section>
+
     <!-- Điểm thưởng -->
     <section class="points" aria-live="polite">
       <span class="num" id="points">…</span>
@@ -50,10 +66,6 @@
           <div class="receipt" id="receipt">
             <h2>Phiếu đặt bánh</h2>
             <div id="cart-lines"><p class="empty">Chưa chọn món nào.</p></div>
-            <label class="field" style="margin-top:.85rem">
-              <span>Ghi chú <span class="muted" style="font-weight:400">(tuỳ chọn)</span></span>
-              <textarea id="note" rows="2" maxlength="500" placeholder="Giờ nhận, địa chỉ giao, lời nhắn…"></textarea>
-            </label>
           </div>
 
           <!-- Cart bar: static trong sidebar (desktop) / fixed bottom (mobile) -->
@@ -63,7 +75,7 @@
                 <strong id="bar-total">0đ</strong>
                 <span id="bar-sub">Chọn món để đặt</span>
               </div>
-              <button class="btn btn-primary" id="submit" type="button" disabled>Gửi đơn</button>
+              <button class="btn btn-primary" id="submit" type="button" disabled>Đến thanh toán</button>
             </div>
           </div>
         </aside>
@@ -121,7 +133,8 @@
     const session = requireSession();
     let menu = [];
     const cart = new Map();
-    let rule = { unitVnd: 10000, pointsPerUnit: 1 };
+    let rule = { pointsPerBox: 1, firstOrderBonus: 2, freeBoxPoints: 10 };
+    let hasOrdered = false;
     let historyLoaded = false;
     const $ = (id) => document.getElementById(id);
 
@@ -133,8 +146,9 @@
       init();
     }
 
-    const estimatePoints = (total) =>
-      rule.unitVnd > 0 ? Math.floor(total / rule.unitVnd) * rule.pointsPerUnit : 0;
+    const estimatePoints = (boxes) => boxes
+      ? boxes * rule.pointsPerBox + (hasOrdered ? 0 : rule.firstOrderBonus)
+      : 0;
 
     async function init() {
       refreshPoints();
@@ -151,9 +165,10 @@
       try {
         const p = await api('myPoints');
         rule = p.rule;
+        hasOrdered = Boolean(p.hasOrdered);
         $('points').textContent = p.points;
         $('points-rule').textContent =
-          `Mỗi ${formatVND(rule.unitVnd)} được ${rule.pointsPerUnit} điểm, cộng ngay khi đặt.`;
+          `1 hộp = ${rule.pointsPerBox} điểm · Đơn đầu +${rule.firstOrderBonus} điểm · ${rule.freeBoxPoints} điểm = 1 hộp miễn phí.`;
         $('admin-link').hidden = !p.isAdmin;
         Session.update({ points: p.points, name: p.name, isAdmin: p.isAdmin });
         renderCart();
@@ -165,25 +180,50 @@
         $('menu').innerHTML = '<li class="empty">Đợt này chưa mở bán. Quay lại sau nhé!</li>';
         return;
       }
-      $('menu').innerHTML = menu.map(m => `
-        <li class="menu-item" data-id="${escapeHtml(m.itemId)}">
+      $('menu').innerHTML = menu.map(m => {
+        const product = productInfo(m);
+        const description = product.description || m.description;
+        return `
+        <li class="menu-item ${product.image ? 'has-image' : ''}" data-id="${escapeHtml(m.itemId)}">
           <div class="menu-item-body">
-            <div class="menu-head">
-              <h3>${escapeHtml(m.name)}</h3>
-              <span class="leader"></span>
-              <span class="price">${formatVND(m.price)}</span>
-            </div>
-            ${m.description ? `<p class="menu-desc">${escapeHtml(m.description)}</p>` : ''}
-            <div class="menu-foot">
-              <div class="stepper">
-                <button type="button" data-act="dec" aria-label="Bớt ${escapeHtml(m.name)}">−</button>
-                <output aria-live="polite">0</output>
-                <button type="button" data-act="inc" aria-label="Thêm ${escapeHtml(m.name)}">+</button>
+            ${product.image ? `<div class="menu-image"><img src="${product.image}" alt="${escapeHtml(product.title)} brownie"></div>` : ''}
+            <div class="menu-copy">
+              <div class="menu-head">
+                <h3>${escapeHtml(product.title || m.name)}</h3>
+                <span class="leader"></span>
+                <span class="price">${formatVND(m.price)}</span>
+              </div>
+              <p class="menu-package">Hộp 12 miếng · khoảng 120g</p>
+              ${description ? `<p class="menu-desc">${escapeHtml(description)}</p>` : ''}
+              <div class="menu-foot">
+                <div class="stepper">
+                  <button type="button" data-act="dec" aria-label="Bớt ${escapeHtml(m.name)}">−</button>
+                  <output aria-live="polite">0</output>
+                  <button type="button" data-act="inc" aria-label="Thêm ${escapeHtml(m.name)}">+</button>
+                </div>
               </div>
             </div>
           </div>
-        </li>`).join('');
+        </li>`;
+      }).join('');
       syncSteppers();
+    }
+
+    function productInfo(m) {
+      const key = `${m.itemId || ''} ${m.name || ''}`.toLowerCase();
+      if (key.includes('matcha')) return {
+        title: 'MATCHA', image: 'assets/brownie-matcha.png',
+        description: 'Matcha thanh dịu, mềm ẩm, ngọt vừa đủ.'
+      };
+      if (key.includes('mix')) return {
+        title: 'MIX', image: 'assets/brownie-mix.png',
+        description: 'Một hộp, hai vị — khỏi cần lựa chọn.'
+      };
+      if (key.includes('classic') || key.includes('fudge')) return {
+        title: 'CLASSIC', image: 'assets/brownie-classic.png',
+        description: 'Đậm chocolate, mềm ẩm, đặc mịn từng miếng.'
+      };
+      return { title: m.name, image: '', description: m.description };
     }
 
     $('menu').addEventListener('click', (e) => {
@@ -217,42 +257,27 @@
       const lines = cartLines();
       const total = lines.reduce((s, l) => s + l.sub, 0);
       const count = lines.reduce((s, l) => s + l.qty, 0);
-      const pts   = estimatePoints(total);
+      const pts   = estimatePoints(count);
 
       $('cart-lines').innerHTML = lines.length ? `
-        <table>
-          ${lines.map(l => `<tr><td>${escapeHtml(l.name)} × ${l.qty}</td><td>${formatVND(l.sub)}</td></tr>`).join('')}
-          <tr class="total"><td>Tổng cộng</td><td>${formatVND(total)}</td></tr>
-          <tr class="earn"><td>Điểm sẽ nhận</td><td>+${pts}</td></tr>
-        </table>` : '<p class="empty">Chưa chọn món nào.</p>';
+        <dl class="receipt-summary">
+          <div><dt>Số lượng bánh</dt><dd>${count} hộp</dd></div>
+          <div><dt>Tổng số tiền</dt><dd>${formatVND(total)}</dd></div>
+          <div class="earn"><dt>Điểm chờ xác nhận thanh toán</dt><dd>+${pts}</dd></div>
+        </dl>` : '<p class="empty">Chưa chọn bánh nào.</p>';
 
       $('bar-total').textContent = formatVND(total);
-      $('bar-sub').textContent   = count ? `${count} món · +${pts} điểm` : 'Chọn món để đặt';
+      $('bar-sub').textContent   = count ? `${count} hộp · +${pts} điểm sau thanh toán` : 'Chọn bánh để đặt';
       $('submit').disabled = !count;
     }
 
     $('submit').addEventListener('click', async () => {
       const lines = cartLines();
       if (!lines.length) return;
-      const total = lines.reduce((s, l) => s + l.sub, 0);
-      if (!confirm(`Gửi đơn ${formatVND(total)}?`)) return;
-      try {
-        const r = await withBusy($('submit'), () => api('createOrder', {
-          items: lines.map(l => ({ itemId: l.itemId, qty: l.qty })),
-          note: $('note').value.trim()
-        }), 'Đang gửi…');
-        cart.clear();
-        $('note').value = '';
-        syncSteppers();
-        renderCart();
-        $('points').textContent = r.points;
-        Session.update({ points: r.points });
-        historyLoaded = false;
-        toast(`Đã nhận đơn ${r.orderId} · ${formatVND(r.total)} · +${r.pointsEarned} điểm`, 'success');
-      } catch (err) {
-        handleError(err);
-        if (/không còn bán/.test(err.message)) init();
-      }
+      sessionStorage.setItem('brownieslab.checkout', JSON.stringify({
+        items: lines.map(l => ({ itemId: l.itemId, qty: l.qty }))
+      }));
+      location.assign('checkout.html');
     });
 
     function showTab(which) {
@@ -266,11 +291,20 @@
     }
     $('tab-menu').addEventListener('click', () => showTab('menu'));
     $('tab-history').addEventListener('click', () => showTab('history'));
+    if (session && new URLSearchParams(location.search).get('tab') === 'history') showTab('history');
 
     function statusClass(s) {
       const t = s.toLowerCase();
       if (/hoàn|xong|đã giao|done/.test(t))  return 'done';
       if (/huỷ|hủy|cancel/.test(t)) return 'cancel';
+      return '';
+    }
+
+    function paymentStatusClass(s) {
+      const t = s.toLowerCase();
+      if (/đã thanh toán|paid/.test(t)) return 'done';
+      if (/huỷ|hủy|cancel/.test(t)) return 'cancel';
+      if (/chờ/.test(t)) return 'pending';
       return '';
     }
 
@@ -289,7 +323,12 @@
             ${o.note ? `<p class="small muted">Ghi chú: ${escapeHtml(o.note)}</p>` : ''}
             <div class="order-foot">
               <span class="muted">${escapeHtml(o.createdAt)}</span>
-              <span><strong>${formatVND(o.total)}</strong> · +${o.pointsEarned} điểm</span>
+              <span><strong>${formatVND(o.total)}</strong> · ${o.pointsCredited ? 'Đã cộng' : 'Chờ xác nhận'} +${o.pointsEarned} điểm</span>
+            </div>
+            <div class="order-actions">
+              <span class="status payment ${paymentStatusClass(o.paymentStatus)}">${escapeHtml(o.paymentMethod)} · ${escapeHtml(o.paymentStatus)}</span>
+              ${o.canPay ? `<a class="btn btn-sm btn-dark" href="payment.html?order=${encodeURIComponent(o.orderId)}">Thanh toán</a>` : ''}
+              ${o.canCancel ? `<button class="btn btn-danger btn-sm" type="button" data-cancel-order="${escapeHtml(o.orderId)}">Huỷ đơn</button>` : ''}
             </div>
           </li>`).join('')
           : '<li class="empty">Bạn chưa có đơn nào.</li>';
@@ -298,6 +337,19 @@
         handleError(err);
       }
     }
+
+    $('orders').addEventListener('click', async (e) => {
+      const button = e.target.closest('[data-cancel-order]');
+      if (!button || !confirm(`Huỷ đơn ${button.dataset.cancelOrder}? Đơn chưa xác nhận thanh toán sẽ không được cộng điểm.`)) return;
+      try {
+        const r = await withBusy(button, () => api('cancelOrder', { orderId: button.dataset.cancelOrder }), 'Đang huỷ…');
+        $('points').textContent = r.points;
+        Session.update({ points: r.points });
+        historyLoaded = false;
+        loadHistory();
+        toast('Đã huỷ đơn.', 'success');
+      } catch (err) { handleError(err); }
+    });
   </script>
 </body>
 </html>

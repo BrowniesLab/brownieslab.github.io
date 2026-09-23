@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#442009">
+  <title>Brownies Lab · Checkout</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner" style="max-width:68rem">
+      <a class="brand" href="order.html"><img class="topbar-logo" src="metadata/Logo.png" alt=""><span>Brownies Lab<small>Checkout</small></span></a>
+      <span class="spacer"></span>
+      <a class="linkbtn" href="order.html">Quay lại giỏ hàng</a>
+    </div>
+  </header>
+
+  <main class="checkout-wrap">
+    <div class="checkout-heading"><p class="eyebrow">Bước 1 / 2</p><h1>Thông tin nhận bánh</h1><p>Kiểm tra đơn và cho Brownies Lab biết cách giao bánh phù hợp nhất.</p></div>
+    <div class="checkout-layout">
+      <form class="checkout-form" id="checkout-form" novalidate>
+        <section class="checkout-section">
+          <h2>Người nhận</h2>
+          <label class="checkline"><input id="same-recipient" type="checkbox" checked> Người đặt và người nhận bánh là cùng một người</label>
+          <div id="recipient-fields" hidden>
+            <label class="field"><span>Họ và tên người nhận</span><input id="recipient-name" maxlength="60" placeholder="Nguyễn Văn A"></label>
+            <label class="field"><span>Số điện thoại người nhận</span><input id="recipient-phone" type="tel" inputmode="tel" maxlength="20" placeholder="09xx xxx xxx"></label>
+            <label class="field"><span>Lời nhắn đến người nhận <span class="muted" style="font-weight:400">(tuỳ chọn)</span></span><textarea id="recipient-message" rows="3" maxlength="300" placeholder="Ví dụ: Chúc bạn một ngày thật ngọt ngào!"></textarea></label>
+          </div>
+        </section>
+
+        <section class="checkout-section">
+          <h2>Cách nhận bánh</h2>
+          <div class="choice-row" role="radiogroup" aria-label="Cách nhận bánh">
+            <label class="choice-card"><input type="radio" name="fulfillment" value="pickup" checked><span>Nhận tại NEU</span></label>
+            <label class="choice-card"><input type="radio" name="fulfillment" value="delivery"><span>Giao tận nơi</span></label>
+          </div>
+          <div id="pickup-fields">
+            <label class="field"><span>Toà nhà, phòng học/giảng đường, tầng <span class="muted" style="font-weight:400">(nếu có)</span></span><textarea id="pickup-location" rows="2" maxlength="300" placeholder="Ví dụ: Toà A1, phòng 302, tầng 3"></textarea></label>
+          </div>
+          <div id="delivery-fields" hidden>
+            <label class="field"><span>Địa chỉ giao bánh</span><textarea id="delivery-address" rows="3" maxlength="500" placeholder="Ghi chi tiết địa chỉ để Brownies Lab tính khoảng cách và báo phí ship chính xác."></textarea></label>
+          </div>
+        </section>
+
+        <section class="checkout-section">
+          <h2>Thời gian nhận bánh</h2>
+          <div class="field-grid">
+            <label class="field"><span>Ngày nhận bánh</span><select id="pickup-date" required></select></label>
+            <label class="field"><span>Thời gian nhận bánh</span><select id="pickup-time" required>
+              <option value="Sáng (10–11h)">Sáng (10–11h)</option>
+              <option value="Trưa (12–13h)">Trưa (12–13h)</option>
+              <option value="Chiều (15–16h)">Chiều (15–16h)</option>
+            </select></label>
+          </div>
+          <label class="field"><span>Ghi chú <span class="muted" style="font-weight:400">(tuỳ chọn)</span></span><textarea id="note" rows="3" maxlength="500" placeholder="Yêu cầu giao nhận hoặc lời nhắn thêm cho Brownies Lab…"></textarea></label>
+        </section>
+
+        <section class="checkout-section">
+          <h2>Thanh toán</h2>
+          <div class="choice-row" role="radiogroup" aria-label="Phương thức thanh toán">
+            <label class="choice-card"><input type="radio" name="payment-method" value="cod" checked><span>Thanh toán khi nhận hàng</span></label>
+            <label class="choice-card"><input type="radio" name="payment-method" value="prepaid"><span>Thanh toán trước</span></label>
+          </div>
+          <p class="small muted" id="payment-method-note">Bạn thanh toán khi Brownies Lab giao/đưa bánh.</p>
+        </section>
+
+        <button class="btn btn-primary btn-block" id="place-order" type="submit">Tạo đơn &amp; đến thanh toán</button>
+      </form>
+
+      <aside class="checkout-receipt">
+        <h2>Đơn của bạn</h2>
+        <div id="checkout-lines" class="loading" style="height:7rem"></div>
+      </aside>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+  <script>
+    const session = requireSession();
+    const $ = (id) => document.getElementById(id);
+    const CHECKOUT_KEY = 'brownieslab.checkout';
+    let draft = null, menu = [], pointRule = { pointsPerBox: 1, firstOrderBonus: 2 }, hasOrdered = false;
+
+    try { draft = JSON.parse(sessionStorage.getItem(CHECKOUT_KEY) || 'null'); } catch (e) {}
+    if (!session || !draft || !Array.isArray(draft.items) || !draft.items.length) location.replace('order.html');
+
+    function renderDates() {
+      const days = [];
+      for (let offset = 0; offset < 21 && days.length < 2; offset++) {
+        const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + offset);
+        if ((d.getDay() === 1 || d.getDay() === 5) && !days.some(x => x.getDay() === d.getDay())) days.push(d);
+      }
+      $('pickup-date').innerHTML = days.map(d => {
+        const weekday = d.getDay() === 1 ? 'Thứ 2' : 'Thứ 6';
+        return `<option value="${weekday} (${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')})">${weekday} (${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')})</option>`;
+      }).join('');
+    }
+
+    function toggleRecipient() { $('recipient-fields').hidden = $('same-recipient').checked; }
+    function toggleFulfillment() {
+      const pickup = document.querySelector('[name=fulfillment]:checked').value === 'pickup';
+      $('pickup-fields').hidden = !pickup; $('delivery-fields').hidden = pickup;
+    }
+    $('same-recipient').addEventListener('change', toggleRecipient);
+    document.querySelectorAll('[name=fulfillment]').forEach(el => el.addEventListener('change', toggleFulfillment));
+
+    function estimatePoints(count) { return count * pointRule.pointsPerBox + (hasOrdered ? 0 : pointRule.firstOrderBonus); }
+    async function init() {
+      renderDates();
+      try {
+        const [activeMenu, p] = await Promise.all([apiGet('getMenu'), api('myPoints')]);
+        menu = activeMenu; pointRule = p.rule; hasOrdered = Boolean(p.hasOrdered);
+        const lines = draft.items.map(i => {
+          const m = menu.find(x => x.itemId === i.itemId);
+          return m ? { ...m, qty: Number(i.qty) || 0 } : null;
+        }).filter(Boolean);
+        if (!lines.length) throw new Error('Các món trong giỏ không còn bán. Vui lòng chọn lại.');
+        const total = lines.reduce((sum, l) => sum + l.price * l.qty, 0);
+        const count = lines.reduce((sum, l) => sum + l.qty, 0);
+        $('checkout-lines').className = '';
+        $('checkout-lines').innerHTML = `<ul class="checkout-items">${lines.map(l => `<li><span>${escapeHtml(l.name)} × ${l.qty}</span><strong>${formatVND(l.price * l.qty)}</strong></li>`).join('')}</ul><dl class="receipt-summary"><div><dt>Số lượng bánh</dt><dd>${count} hộp</dd></div><div><dt>Tổng số tiền</dt><dd>${formatVND(total)}</dd></div><div class="earn"><dt>Điểm chờ xác nhận thanh toán</dt><dd>+${estimatePoints(count)}</dd></div></dl>`;
+      } catch (err) { $('checkout-lines').className = 'empty'; $('checkout-lines').textContent = err.message; handleError(err); }
+    }
+
+    $('checkout-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const sameRecipient = $('same-recipient').checked;
+      const fulfillmentType = document.querySelector('[name=fulfillment]:checked').value;
+      const paymentMethod = document.querySelector('[name=payment-method]:checked').value;
+      try {
+        const r = await withBusy($('place-order'), () => api('createOrder', {
+          items: draft.items,
+          checkout: {
+            sameRecipient,
+            recipientName: $('recipient-name').value.trim(), recipientPhone: $('recipient-phone').value.trim(),
+            recipientMessage: $('recipient-message').value.trim(), fulfillmentType,
+            pickupLocation: $('pickup-location').value.trim(), deliveryAddress: $('delivery-address').value.trim(),
+            pickupDate: $('pickup-date').value, pickupTime: $('pickup-time').value, note: $('note').value.trim(), paymentMethod
+          }
+        }), 'Đang tạo đơn…');
+        sessionStorage.removeItem(CHECKOUT_KEY);
+        Session.update({ points: r.points });
+        location.replace(paymentMethod === 'prepaid'
+          ? 'payment.html?order=' + encodeURIComponent(r.orderId)
+          : 'order.html?tab=history');
+      } catch (err) { handleError(err); }
+    });
+
+    document.querySelectorAll('[name=payment-method]').forEach(el => el.addEventListener('change', () => {
+      const prepaid = document.querySelector('[name=payment-method]:checked').value === 'prepaid';
+      $('payment-method-note').textContent = prepaid
+        ? 'Sau khi tạo đơn, bạn cần quét QR và tải ảnh chuyển khoản để Brownies Lab xác nhận.'
+        : 'Bạn thanh toán khi Brownies Lab giao/đưa bánh.';
+    }));
+
+    if (session && draft) init();
+  </script>
+</body>
+</html>

@@ -10,6 +10,8 @@ Web nội bộ để khách đặt brownie theo đợt và tích điểm, thay c
 Code.gs      backend, dán vào Apps Script
 index.html   đăng nhập / đăng ký
 order.html   đặt bánh, điểm thưởng, lịch sử đơn
+checkout.html nhập thông tin người nhận, giao/nhận và thời gian nhận bánh
+payment.html QR thanh toán và tải ảnh chuyển khoản
 admin.html   xem / sửa / thêm / xoá trên 4 bảng (tự sinh theo header)
 style.css    giao diện dùng chung
 app.js       gọi API + lưu phiên đăng nhập (localStorage)
@@ -26,7 +28,7 @@ app.js       gọi API + lưu phiên đăng nhập (localStorage)
 |------------|---------------------------------------------------------------------------------------------|
 | `Users`    | Phone · Name · PinHash · Points · IsAdmin · CreatedAt · SocialLink                           |
 | `Menu`     | ItemID · Name · Price · Description · Active                                                 |
-| `Orders`   | OrderID · Phone · CustomerName · ItemsJSON · Total · PointsEarned · Status · CreatedAt · Note |
+| `Orders`   | OrderID · Phone · CustomerName · ItemsJSON · Total · PointsEarned · PointsCredited · Status · CreatedAt · Note · RecipientName · RecipientPhone · RecipientMessage · FulfillmentType · PickupLocation · DeliveryAddress · PickupDate · PickupTime · PaymentMethod · PaymentStatus · PaymentProofUrl |
 | `Sessions` | Token · Phone · ExpiresAt                                                                    |
 
 > **Làm nhanh:** không cần tạo tay. Sau Bước 2, chạy hàm `setup()` để script tự tạo 4 tab, header,
@@ -56,14 +58,18 @@ Trong **Script Properties**, thêm hoặc sửa các khoá sau (không có thì 
 
 | Khoá               | Mặc định | Ý nghĩa                                                   |
 |--------------------|----------|-----------------------------------------------------------|
-| `POINT_UNIT_VND`   | 10000    | Mỗi bấy nhiêu đồng…                                       |
-| `POINTS_PER_UNIT`  | 1        | …được bấy nhiêu điểm. Điểm = floor(Tổng / UNIT) × PER     |
+| `POINTS_PER_BOX`   | 1        | Mỗi hộp bánh được bấy nhiêu điểm                           |
+| `FIRST_ORDER_BONUS`| 2        | Điểm thưởng thêm cho đơn đầu tiên của mỗi khách            |
+| `FREE_BOX_POINTS`  | 10       | Số điểm cần để đổi một hộp bánh miễn phí                   |
+| `PAYMENT_QR_URL`   | *(trống)*| Link công khai tới ảnh QR nhận thanh toán                  |
 | `SESSION_DAYS`     | 30       | Số ngày token đăng nhập còn hiệu lực                     |
 | `MAX_LOGIN_FAILS`  | 5        | Sai PIN quá số lần này thì tạm khoá SĐT đó                |
 | `LOCK_MINUTES`     | 15       | Thời gian khoá tạm                                       |
 | `NEW_ORDER_STATUS` | Mới      | Trạng thái gán cho đơn mới                                |
 
-Điểm được cộng **ngay khi đặt đơn**. Nếu admin huỷ đơn, hãy trừ điểm tay trong bảng Khách hàng.
+Điểm được ghi ở đơn dưới dạng **chờ cộng** khi tạo đơn, chưa vào tài khoản khách. Admin chỉ bấm **“Xác nhận TT & cộng điểm”** sau khi đã tự kiểm tra thanh toán: đơn trả trước phải có ảnh minh chứng, còn đơn thanh toán khi nhận hàng chỉ bấm sau khi giao/nhận tiền. Mỗi đơn chỉ cộng một lần (`PointsCredited = TRUE`).
+
+Để bật trang thanh toán, thêm `PAYMENT_QR_URL` trong Script Properties với link công khai tới ảnh QR. Khi khách tải ảnh chuyển khoản, script sẽ tự tạo thư mục `Brownies Lab - Payment Proofs` trong Drive và lưu link ảnh vào `Orders.PaymentProofUrl`.
 
 ## Bước 3 — Deploy Web App
 
@@ -119,6 +125,7 @@ Repo này dùng lại repo GitHub cũ `ComputerNetwork-Web_Interview_Recorder`, 
 - Bấm vào một dòng để sửa hoặc xoá. Khi lưu, chỉ các ô đã thay đổi được gửi lên.
 - **Đặt lại PIN cho khách:** gõ PIN mới (4–6 số) vào ô `PinHash`, hệ thống tự hash.
 - Đúng/sai nhập `TRUE`/`FALSE`, ngày nhập `yyyy-mm-dd hh:mm`.
+- Trong tab **Đơn hàng**, mỗi đơn là một thẻ; bấm thẻ để xem chi tiết. Với thanh toán trước, chỉ khi khách đã tải ảnh minh chứng thì nút **Xác nhận TT & cộng điểm** mới hiện. Với COD, chỉ bấm nút đó sau khi đã giao bánh và nhận tiền.
 - Trước khi sửa/xoá, server kiểm tra lại ô đầu tiên của dòng. Nếu sheet đã bị đổi (có người xoá/chèn dòng) thì
   thao tác bị từ chối và yêu cầu tải lại, để tránh sửa nhầm dòng.
 - Xoá dòng trong tab Phiên đăng nhập sẽ buộc thiết bị đó đăng xuất.
@@ -134,7 +141,10 @@ Kết quả luôn là `{"ok": true, "data": …}` hoặc `{"ok": false, "error":
 | `login`          | phone, pin                           | như trên                                           |
 | `logout`         | token                                | `{loggedOut}`                                      |
 | `getMenu`        | (**GET** `?action=getMenu`)          | các món có `Active = TRUE`                         |
-| `createOrder`    | token, items `[{itemId, qty}]`, note | `{orderId, total, pointsEarned, points}`           |
+| `createOrder`    | token, items `[{itemId, qty}]`, checkout | `{orderId, total, pointsEarned, points}`        |
+| `cancelOrder`    | token, orderId                       | Huỷ đơn còn mới/chờ thanh toán và hoàn tác điểm    |
+| `paymentInfo`    | token, orderId                       | Thông tin QR, tổng tiền và trạng thái thanh toán    |
+| `uploadPaymentProof` | token, orderId, filename, mimeType, base64 | Lưu ảnh chuyển khoản vào Drive               |
 | `myOrders`       | token                                | đơn của khách, mới nhất trước                      |
 | `myPoints`       | token                                | `{points, name, isAdmin, rule}`                    |
 | `adminListSheet` | token, sheet                         | `{headers, rows: [{rowIndex, values}]}`            |
