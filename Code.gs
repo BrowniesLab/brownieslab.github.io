@@ -20,14 +20,14 @@ var DEFAULTS = {
 };
 
 var SHEETS = {
-  Users:    ['Phone', 'Name', 'PinHash', 'Points', 'IsAdmin', 'CreatedAt'],
+  Users:    ['Phone', 'Name', 'PinHash', 'Points', 'IsAdmin', 'CreatedAt', 'SocialLink'],
   Menu:     ['ItemID', 'Name', 'Price', 'Description', 'Active'],
   Orders:   ['OrderID', 'Phone', 'CustomerName', 'ItemsJSON', 'Total', 'PointsEarned', 'Status', 'CreatedAt', 'Note'],
   Sessions: ['Token', 'Phone', 'ExpiresAt']
 };
 
 // Cột luôn lưu dạng chữ (giữ số 0 đầu SĐT, không để Sheets tự đổi thành số/ngày)
-var TEXT_COLUMNS = ['Phone', 'PinHash', 'Token', 'OrderID', 'ItemID', 'ItemsJSON', 'Note', 'Name', 'CustomerName', 'Description', 'Status'];
+var TEXT_COLUMNS = ['Phone', 'PinHash', 'Token', 'OrderID', 'ItemID', 'ItemsJSON', 'Note', 'Name', 'CustomerName', 'Description', 'Status', 'SocialLink'];
 
 function cfg_(key) {
   var v = PropertiesService.getScriptProperties().getProperty(key);
@@ -57,7 +57,7 @@ function doPost(e) {
 }
 
 var ACTIONS = {
-  register:       function (b) { return withLock_(function () { return register_(b.phone, b.name, b.pin); }); },
+  register:       function (b) { return withLock_(function () { return register_(b.phone, b.name, b.pin, b.socialLink); }); },
   login:          function (b) { return login_(b.phone, b.pin); },
   logout:         function (b) { return withLock_(function () { return logout_(b.token); }); },
   getMenu:        function ()  { return getMenu_(); },
@@ -84,9 +84,10 @@ function withLock_(fn) {
 }
 
 // ===================== AUTH =====================
-function register_(phone, name, pin) {
+function register_(phone, name, pin, socialLink) {
   phone = normPhone_(phone);
   name = String(name || '').trim();
+  socialLink = normSocialLink_(socialLink);
   validatePin_(pin);
   if (!name) throw new Error('Vui lòng nhập tên.');
   if (name.length > 60) throw new Error('Tên quá dài.');
@@ -96,7 +97,7 @@ function register_(phone, name, pin) {
 
   appendObject_(users, {
     Phone: phone, Name: name, PinHash: hashPin_(phone, pin),
-    Points: 0, IsAdmin: false, CreatedAt: new Date()
+    Points: 0, IsAdmin: false, CreatedAt: new Date(), SocialLink: socialLink
   });
   return createSession_({ Phone: phone, Name: name, Points: 0, IsAdmin: false });
 }
@@ -191,6 +192,18 @@ function normPhone_(p) {
   else if (/^84\d{9}$/.test(s)) s = '0' + s.slice(2);
   else if (/^[1-9]\d{8}$/.test(s)) s = '0' + s;
   if (!/^0\d{9,10}$/.test(s)) throw new Error('Số điện thoại không hợp lệ.');
+  return s;
+}
+
+/** Link liên hệ tuỳ chọn, dùng để xác nhận đơn qua Facebook hoặc Instagram. */
+function normSocialLink_(link) {
+  var s = String(link || '').trim();
+  if (!s) return '';
+  if (s.length > 300) throw new Error('Link Facebook hoặc Instagram quá dài.');
+  if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+  if (!/^https?:\/\/[^\s/]+(?:\/[^\s]*)?$/i.test(s)) {
+    throw new Error('Link Facebook hoặc Instagram không hợp lệ.');
+  }
   return s;
 }
 
@@ -492,7 +505,14 @@ function setup() {
       if (TEXT_COLUMNS.indexOf(h) >= 0) sh.getRange(2, i + 1, sh.getMaxRows() - 1, 1).setNumberFormat('@');
     });
     var missing = headers.filter(function (h) { return actual.indexOf(h) < 0; });
-    if (missing.length) Logger.log('Tab ' + name + ' thiếu cột: ' + missing.join(', '));
+    if (missing.length) {
+      var first = actual.length + 1;
+      sh.getRange(1, first, 1, missing.length).setValues([missing]).setFontWeight('bold');
+      missing.forEach(function (h, i) {
+        if (TEXT_COLUMNS.indexOf(h) >= 0) sh.getRange(2, first + i, sh.getMaxRows() - 1, 1).setNumberFormat('@');
+      });
+      Logger.log('Đã thêm cột vào tab ' + name + ': ' + missing.join(', '));
+    }
   });
 
   var menu = ss.getSheetByName('Menu');

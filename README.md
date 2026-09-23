@@ -24,7 +24,7 @@ app.js       gọi API + lưu phiên đăng nhập (localStorage)
 
 | Tab        | Header (dòng 1, mỗi ô một cột)                                                              |
 |------------|---------------------------------------------------------------------------------------------|
-| `Users`    | Phone · Name · PinHash · Points · IsAdmin · CreatedAt                                        |
+| `Users`    | Phone · Name · PinHash · Points · IsAdmin · CreatedAt · SocialLink                           |
 | `Menu`     | ItemID · Name · Price · Description · Active                                                 |
 | `Orders`   | OrderID · Phone · CustomerName · ItemsJSON · Total · PointsEarned · Status · CreatedAt · Note |
 | `Sessions` | Token · Phone · ExpiresAt                                                                    |

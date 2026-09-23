@@ -60,13 +60,18 @@
 
       <form id="form-register" role="tabpanel" aria-labelledby="tab-register" hidden novalidate>
         <label class="field">
-          <span>Tên của bạn</span>
+          <span>Họ và tên của bạn</span>
           <input name="name" autocomplete="name" maxlength="60" required placeholder="Nguyễn Văn A">
         </label>
         <label class="field">
           <span>Số điện thoại</span>
           <input name="phone" type="tel" inputmode="tel" autocomplete="tel" required placeholder="09xx xxx xxx">
           <div class="hint">Dùng để nhận diện và cộng điểm, không gửi tin nhắn.</div>
+        </label>
+        <label class="field">
+          <span>Link Facebook hoặc Instagram <span class="muted" style="font-weight:400">(tuỳ chọn)</span></span>
+          <input name="socialLink" type="url" inputmode="url" autocomplete="url" maxlength="300" placeholder="instagram.com/ten_cua_ban">
+          <div class="hint">Brownies Lab sẽ dùng link này để nhắn xác nhận đơn cho bạn.</div>
         </label>
         <label class="field">
           <span>Mã PIN (4 đến 6 số)</span>
@@ -124,7 +129,10 @@
         checkPin(f.pin.value);
         if (f.pin.value !== f.pin2.value) throw new Error('Hai lần nhập PIN không khớp.');
         await withBusy(f.querySelector('button[type=submit]'), async () =>
-          onSuccess(await api('register', { phone: f.phone.value, name: f.name.value.trim(), pin: f.pin.value })));
+          onSuccess(await api('register', {
+            phone: f.phone.value, name: f.name.value.trim(), pin: f.pin.value,
+            socialLink: f.socialLink.value.trim()
+          })));
       } catch (err) { handleError(err); }
     });
   </script>
