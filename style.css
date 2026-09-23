@@ -203,7 +203,7 @@ body.auth-page main { animation: none; }
 .auth-brand {
   /* Tự chỉnh ảnh đăng nhập tại 3 dòng dưới đây. */
   --login-photo-size: min(56%, 34vh, 34rem); /* tăng số này để ảnh to hơn */
-  --login-photo-bottom: max(13rem, 24vh);    /* tăng số này để đẩy ảnh lên */
+  --login-photo-bottom: max(10rem, 19vh);    /* tăng số này để đẩy ảnh lên */
   --login-photo-stretch: 1.45;               /* tăng để ảnh rộng ngang hơn */
   background: #F8F1EA; color: var(--brown);
   width: 44%; flex-shrink: 0;
