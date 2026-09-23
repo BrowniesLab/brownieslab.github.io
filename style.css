@@ -223,7 +223,7 @@ body.auth-page main { animation: none; }
 .auth-brand > :not(.auth-bakes) { position: relative; z-index: 2; }
 .auth-bakes { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
 .auth-hero-photo {
-  position: absolute; left: 33%; bottom: var(--login-photo-bottom); display: block;
+  position: absolute; left: 30%; bottom: var(--login-photo-bottom); display: block;
   /* Ảnh nằm ngang nên sau khi xoay, chiều rộng này chính là chiều cao hiển thị. */
   width: var(--login-photo-size); height: auto; max-height: none;
   transform: translateX(-50%) rotate(270deg) scale(1.18) scaleY(var(--login-photo-stretch));
