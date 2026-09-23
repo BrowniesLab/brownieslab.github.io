@@ -205,7 +205,7 @@ body.auth-page main { animation: none; }
   --login-photo-size: min(56%, 34vh, 34rem); /* tăng số này để ảnh to hơn */
   --login-photo-bottom: max(11.5rem, 21.5vh); /* tăng số này để đẩy ảnh lên */
   --login-photo-stretch: 1.45;               /* tăng để ảnh rộng ngang hơn */
-  background: #F8F1EA; color: var(--brown);
+  background: #2E1609; color: #fff;
   width: 44%; flex-shrink: 0;
   padding: 3.5rem 3rem;
   display: flex; flex-direction: column; gap: 2rem;
@@ -229,18 +229,18 @@ body.auth-page main { animation: none; }
   transform: translateX(-50%) rotate(270deg) scale(1.18) scaleY(var(--login-photo-stretch));
   border-radius: var(--r-lg); box-shadow: var(--sh-lg);
 }
-.auth-brand .brand { font-size: 1.5rem; display: inline-flex; align-items: center; gap: .7rem; align-self: flex-start; color: var(--dark); }
+.auth-brand .brand { font-size: 1.5rem; display: inline-flex; align-items: center; gap: .7rem; align-self: flex-start; color: #fff; }
 .brand-logo {
   display: block; width: 7rem; height: 7rem;
   object-fit: contain; flex: 0 0 auto;
 }
-.auth-brand .brand small { color: #94544b; }
+.auth-brand .brand small { color: var(--pink); }
 .auth-brand h1 {
   font-size: clamp(2rem,4vw,3rem);
-  color: var(--dark); line-height: 1.1;
+  color: #fff; line-height: 1.1;
 }
 .auth-brand h1 span { color: #b85d5d; }
-.auth-brand p { color: var(--muted); max-width: 28ch; line-height: 1.65; }
+.auth-brand p { color: #F1D6C3; max-width: 28ch; line-height: 1.65; }
 .social-row { margin-top: auto; display: flex; gap: .55rem; flex-wrap: wrap; }
 .social-link {
   display: inline-flex; align-items: center; gap: .4rem;
