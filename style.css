@@ -202,9 +202,9 @@ body.auth-page main { animation: none; }
 }
 .auth-brand {
   /* Tự chỉnh ảnh đăng nhập tại 3 dòng dưới đây. */
-  --login-photo-size: min(58%, 36vh, 40rem); /* tăng số này để ảnh to hơn */
-  --login-photo-bottom: max(13rem, 24vh);     /* tăng số này để đẩy ảnh lên */
-  --login-photo-stretch: 1.6;               /* tăng để ảnh rộng ngang hơn */
+  --login-photo-size: min(52%, 28vh, 20rem); /* tăng số này để ảnh to hơn */
+  --login-photo-bottom: max(7rem, 12vh);     /* tăng số này để đẩy ảnh lên */
+  --login-photo-stretch: 1.14;               /* tăng để ảnh rộng ngang hơn */
   background: #F8F1EA; color: var(--brown);
   width: 44%; flex-shrink: 0;
   padding: 3.5rem 3rem;
@@ -223,10 +223,10 @@ body.auth-page main { animation: none; }
 .auth-brand > :not(.auth-bakes) { position: relative; z-index: 2; }
 .auth-bakes { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
 .auth-hero-photo {
-  position: absolute; left: 33%; bottom: var(--login-photo-bottom); display: block;
+  position: absolute; left: 50%; bottom: var(--login-photo-bottom); display: block;
   /* Ảnh nằm ngang nên sau khi xoay, chiều rộng này chính là chiều cao hiển thị. */
   width: var(--login-photo-size); height: auto; max-height: none;
-  transform: translateX(-50%) rotate(270deg) scale(1.25) scaleY(var(--login-photo-stretch));
+  transform: translateX(-50%) rotate(270deg) scale(1.1) scaleY(var(--login-photo-stretch));
   border-radius: var(--r-lg); box-shadow: var(--sh-lg);
 }
 .auth-brand .brand { font-size: 1.5rem; display: inline-flex; align-items: center; gap: .7rem; align-self: flex-start; color: var(--dark); }
