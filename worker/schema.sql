@@ -9,7 +9,10 @@ CREATE TABLE IF NOT EXISTS users (
   points INTEGER NOT NULL DEFAULT 0,
   is_admin INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
-  social_link TEXT NOT NULL DEFAULT ''
+  social_link TEXT NOT NULL DEFAULT '',
+  -- 0 = SĐT này còn được phép "đăng ký lại" 1 lần để tự đặt PIN mới (dùng khi migrate dữ liệu
+  -- cũ, PIN cũ không dùng được nữa). Set về 1 ngay sau lần đăng ký/đăng ký-lại đầu tiên.
+  claim_used INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 

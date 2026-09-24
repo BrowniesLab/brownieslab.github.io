@@ -109,10 +109,19 @@ async function register(b, ctx) {
   if (!name) throw new Error('Vui lòng nhập tên.');
   if (name.length > 60) throw new Error('Tên quá dài.');
 
-  const existing = await ctx.env.DB.prepare('SELECT 1 FROM users WHERE phone = ?').bind(phone).first();
-  if (existing) throw new Error('Số điện thoại này đã đăng ký. Hãy đăng nhập.');
+  const existing = await ctx.env.DB.prepare('SELECT * FROM users WHERE phone = ?').bind(phone).first();
+  if (existing && existing.claim_used) throw new Error('Số điện thoại này đã đăng ký. Hãy đăng nhập.');
 
   const pinHash = await hashPin(ctx.env, phone, b.pin);
+
+  if (existing) {
+    // SĐT đã có sẵn trong dữ liệu cũ (migrate) nhưng chưa từng tự đặt PIN qua hệ thống mới —
+    // cho đăng ký lại đúng 1 lần để nhận lại tài khoản: giữ nguyên điểm/quyền admin, chỉ đặt PIN mới.
+    await ctx.env.DB.prepare('UPDATE users SET name = ?, pin_hash = ?, social_link = ?, claim_used = 1 WHERE phone = ?')
+      .bind(name, pinHash, socialLink, phone).run();
+    return createSession(ctx.env, { phone, name, points: existing.points, is_admin: existing.is_admin });
+  }
+
   const createdAt = new Date().toISOString();
   const signupBonus = Math.max(0, Number(cfg(ctx.env, 'SIGNUP_BONUS')) || 0);
 
@@ -124,7 +133,7 @@ async function register(b, ctx) {
   const points = signupBonus + legacyPoints;
 
   await ctx.env.DB.prepare(
-    'INSERT INTO users (phone, name, pin_hash, points, is_admin, created_at, social_link) VALUES (?,?,?,?,0,?,?)'
+    'INSERT INTO users (phone, name, pin_hash, points, is_admin, created_at, social_link, claim_used) VALUES (?,?,?,?,0,?,?,1)'
   ).bind(phone, name, pinHash, points, createdAt, socialLink).run();
   if (legacyOrders.length) {
     const ids = legacyOrders.map(o => o.id);
