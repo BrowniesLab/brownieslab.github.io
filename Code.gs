@@ -12,7 +12,7 @@
 var DEFAULTS = {
   PIN_SALT: 'BrowniesLab::doi-chuoi-nay-truoc-khi-deploy',
   POINTS_PER_BOX: 1,       // mỗi hộp bánh được bấy nhiêu điểm
-  FIRST_ORDER_BONUS: 2,    // thưởng thêm cho đơn đầu tiên của mỗi khách
+  SIGNUP_BONUS: 2,         // tặng ngay khi tạo tài khoản mới
   FREE_BOX_POINTS: 10,     // số điểm đổi một hộp miễn phí
   SESSION_DAYS: 30,        // hạn của token đăng nhập
   MAX_LOGIN_FAILS: 5,      // sai PIN quá số lần này thì khoá tạm
@@ -105,11 +105,12 @@ function register_(phone, name, pin, socialLink) {
   var users = table_('Users');
   if (findRow_(users, 'Phone', phone, normPhone_)) throw new Error('Số điện thoại này đã đăng ký. Hãy đăng nhập.');
 
+  var signupBonus = Math.max(0, Number(cfg_('SIGNUP_BONUS')) || 0);
   appendObject_(users, {
     Phone: phone, Name: name, PinHash: hashPin_(phone, pin),
-    Points: 0, IsAdmin: false, CreatedAt: new Date(), SocialLink: socialLink
+    Points: signupBonus, IsAdmin: false, CreatedAt: new Date(), SocialLink: socialLink
   });
-  return createSession_({ Phone: phone, Name: name, Points: 0, IsAdmin: false });
+  return createSession_({ Phone: phone, Name: name, Points: signupBonus, IsAdmin: false });
 }
 
 function login_(phone, pin) {
@@ -205,14 +206,14 @@ function normPhone_(p) {
   return s;
 }
 
-/** Link liên hệ tuỳ chọn, dùng để xác nhận đơn qua Facebook hoặc Instagram. */
+/** Link Instagram tuỳ chọn, dùng để xác nhận đơn với khách. */
 function normSocialLink_(link) {
   var s = String(link || '').trim();
   if (!s) return '';
-  if (s.length > 300) throw new Error('Link Facebook hoặc Instagram quá dài.');
+  if (s.length > 300) throw new Error('Link Instagram quá dài.');
   if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
-  if (!/^https?:\/\/[^\s/]+(?:\/[^\s]*)?$/i.test(s)) {
-    throw new Error('Link Facebook hoặc Instagram không hợp lệ.');
+  if (!/^https?:\/\/(?:www\.)?instagram\.com(?:\/|$)/i.test(s) || !/^https?:\/\/[^\s/]+(?:\/[^\s]*)?$/i.test(s)) {
+    throw new Error('Vui lòng nhập link Instagram hợp lệ.');
   }
   return s;
 }
@@ -231,15 +232,9 @@ function getMenu_() {
     });
 }
 
-function pointsFor_(lines, isFirstOrder) {
+function pointsFor_(lines) {
   var boxes = lines.reduce(function (sum, line) { return sum + Number(line.qty || 0); }, 0);
-  return boxes * cfg_('POINTS_PER_BOX') + (isFirstOrder ? cfg_('FIRST_ORDER_BONUS') : 0);
-}
-
-function hasOrdered_(phone) {
-  return table_('Orders').objects.some(function (o) {
-    return safePhone_(o.obj.Phone) === phone && !isCancelledStatus_(o.obj.Status);
-  });
+  return boxes * cfg_('POINTS_PER_BOX');
 }
 
 function isCancelledStatus_(status) {
@@ -312,8 +307,7 @@ function createOrder_(token, items, checkout) {
     total += menu[id].price * qty;
   });
 
-  var isFirstOrder = !hasOrdered_(phone);
-  var earned = pointsFor_(lines, isFirstOrder);
+  var earned = pointsFor_(lines);
   var orderId = 'BL' + Utilities.formatDate(new Date(), tz_(), 'yyMMdd-HHmmss') + '-' +
     Math.random().toString(36).slice(2, 5).toUpperCase();
   var order = {
@@ -343,7 +337,7 @@ function createOrder_(token, items, checkout) {
 
   onOrderCreated_(order, lines);
 
-  return { orderId: orderId, total: total, pointsEarned: earned, points: Number(user.obj.Points) || 0, isFirstOrder: isFirstOrder, paymentMethod: checkoutData.PaymentMethod };
+  return { orderId: orderId, total: total, pointsEarned: earned, points: Number(user.obj.Points) || 0, paymentMethod: checkoutData.PaymentMethod };
 }
 
 /**
@@ -486,15 +480,13 @@ function myOrders_(token) {
 
 function myPoints_(token) {
   var u = requireUser_(token);
-  var hasOrdered = hasOrdered_(normPhone_(u.obj.Phone));
   return {
     points: Number(u.obj.Points) || 0,
     name: String(u.obj.Name || ''),
     isAdmin: isTrue_(u.obj.IsAdmin),
-    hasOrdered: hasOrdered,
     rule: {
       pointsPerBox: cfg_('POINTS_PER_BOX'),
-      firstOrderBonus: cfg_('FIRST_ORDER_BONUS'),
+      signupBonus: cfg_('SIGNUP_BONUS'),
       freeBoxPoints: cfg_('FREE_BOX_POINTS')
     }
   };

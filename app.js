@@ -1,6 +1,7 @@
 /* Brownies Lab — dùng chung cho mọi trang: gọi API + quản lý phiên đăng nhập */
 
-// Dán URL Web App (kết thúc bằng /exec) sau khi deploy Apps Script
+// Khi deploy Worker: thay bằng URL https://brownies-lab.<subdomain>.workers.dev.
+// Tạm giữ URL Apps Script hiện tại để website không ngắt trước khi Worker được deploy.
 const API_URL = 'https://script.google.com/macros/s/AKfycbxJg7gvKQLzhFfz4VIiFp3LJUpq14JnRuT0NzhZmBJCB9pXQNbH5mNKvtE3dTCrcOkl/exec';
 
 const SESSION_KEY = 'brownieslab.session';
@@ -44,8 +45,7 @@ async function parseResponse(res) {
 }
 
 /**
- * Gọi action qua doPost. Content-Type text/plain để là "simple request",
- * trình duyệt không gửi preflight OPTIONS (Apps Script không xử lý được OPTIONS).
+ * Content-Type text/plain giúp request tương thích với cả Apps Script lẫn Worker.
  */
 async function api(action, payload = {}) {
   assertConfigured();

@@ -3,11 +3,13 @@
 Web nội bộ để khách đặt brownie theo đợt và tích điểm, thay cho Google Form.
 
 - **Frontend:** HTML/CSS/JS thuần, host miễn phí trên GitHub Pages.
-- **Backend:** Google Apps Script (Web App), dùng Google Sheet làm database.
+- **Backend hiện tại:** Cloudflare Worker + D1; xem hướng dẫn deploy tại [`worker/README.md`](worker/README.md).
+- **Backend cũ:** `Code.gs` (Google Apps Script + Google Sheet), giữ lại để tham khảo hoặc chuyển dữ liệu.
 - **Chi phí:** 0đ. Không dùng SMS OTP, Firebase hay dịch vụ trả phí nào.
 
 ```
-Code.gs      backend, dán vào Apps Script
+worker/      backend Cloudflare Worker + schema D1
+Code.gs      backend Apps Script cũ, dùng khi chưa chuyển sang Cloudflare
 index.html   đăng nhập / đăng ký
 order.html   đặt bánh, điểm thưởng, lịch sử đơn
 checkout.html nhập thông tin người nhận, giao/nhận và thời gian nhận bánh
@@ -59,7 +61,7 @@ Trong **Script Properties**, thêm hoặc sửa các khoá sau (không có thì 
 | Khoá               | Mặc định | Ý nghĩa                                                   |
 |--------------------|----------|-----------------------------------------------------------|
 | `POINTS_PER_BOX`   | 1        | Mỗi hộp bánh được bấy nhiêu điểm                           |
-| `FIRST_ORDER_BONUS`| 2        | Điểm thưởng thêm cho đơn đầu tiên của mỗi khách            |
+| `SIGNUP_BONUS`    | 2        | Điểm tặng ngay khi tạo tài khoản mới                       |
 | `FREE_BOX_POINTS`  | 10       | Số điểm cần để đổi một hộp bánh miễn phí                   |
 | `PAYMENT_QR_URL`   | *(trống)*| Link công khai tới ảnh QR nhận thanh toán                  |
 | `SESSION_DAYS`     | 30       | Số ngày token đăng nhập còn hiệu lực                     |

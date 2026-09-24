@@ -133,8 +133,7 @@
     const session = requireSession();
     let menu = [];
     const cart = new Map();
-    let rule = { pointsPerBox: 1, firstOrderBonus: 2, freeBoxPoints: 10 };
-    let hasOrdered = false;
+    let rule = { pointsPerBox: 1, signupBonus: 2, freeBoxPoints: 10 };
     let historyLoaded = false;
     const $ = (id) => document.getElementById(id);
 
@@ -146,9 +145,7 @@
       init();
     }
 
-    const estimatePoints = (boxes) => boxes
-      ? boxes * rule.pointsPerBox + (hasOrdered ? 0 : rule.firstOrderBonus)
-      : 0;
+    const estimatePoints = (boxes) => boxes ? boxes * rule.pointsPerBox : 0;
 
     async function init() {
       refreshPoints();
@@ -164,11 +161,10 @@
     async function refreshPoints() {
       try {
         const p = await api('myPoints');
-        rule = p.rule;
-        hasOrdered = Boolean(p.hasOrdered);
+        rule = { ...rule, ...(p.rule || {}) };
         $('points').textContent = p.points;
         $('points-rule').textContent =
-          `1 hộp = ${rule.pointsPerBox} điểm · Đơn đầu +${rule.firstOrderBonus} điểm · ${rule.freeBoxPoints} điểm = 1 hộp miễn phí.`;
+          `Tạo tài khoản +${rule.signupBonus} điểm · 1 hộp = ${rule.pointsPerBox} điểm · ${rule.freeBoxPoints} điểm = 1 hộp miễn phí.`;
         $('admin-link').hidden = !p.isAdmin;
         Session.update({ points: p.points, name: p.name, isAdmin: p.isAdmin });
         renderCart();

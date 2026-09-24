@@ -90,7 +90,7 @@ const ACTIONS = {
 
 // ===================== CẤU HÌNH =====================
 const DEFAULTS = {
-  POINTS_PER_BOX: 1, FIRST_ORDER_BONUS: 2, FREE_BOX_POINTS: 10,
+  POINTS_PER_BOX: 1, SIGNUP_BONUS: 2, FREE_BOX_POINTS: 10,
   SESSION_DAYS: 30, MAX_LOGIN_FAILS: 5, LOCK_MINUTES: 15,
   NEW_ORDER_STATUS: 'Mới', PAYMENT_QR_URL: ''
 };
@@ -114,11 +114,12 @@ async function register(b, ctx) {
 
   const pinHash = await hashPin(ctx.env, phone, b.pin);
   const createdAt = new Date().toISOString();
+  const signupBonus = Math.max(0, Number(cfg(ctx.env, 'SIGNUP_BONUS')) || 0);
   await ctx.env.DB.prepare(
-    'INSERT INTO users (phone, name, pin_hash, points, is_admin, created_at, social_link) VALUES (?,?,?,0,0,?,?)'
-  ).bind(phone, name, pinHash, createdAt, socialLink).run();
+    'INSERT INTO users (phone, name, pin_hash, points, is_admin, created_at, social_link) VALUES (?,?,?,?,0,?,?)'
+  ).bind(phone, name, pinHash, signupBonus, createdAt, socialLink).run();
 
-  return createSession(ctx.env, { phone, name, points: 0, is_admin: 0 });
+  return createSession(ctx.env, { phone, name, points: signupBonus, is_admin: 0 });
 }
 
 async function login(b, ctx) {
@@ -208,9 +209,11 @@ function normPhone(p) {
 function normSocialLink(link) {
   let s = String(link || '').trim();
   if (!s) return '';
-  if (s.length > 300) throw new Error('Link Facebook hoặc Instagram quá dài.');
+  if (s.length > 300) throw new Error('Link Instagram quá dài.');
   if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
-  if (!/^https?:\/\/[^\s/]+(?:\/[^\s]*)?$/i.test(s)) throw new Error('Link Facebook hoặc Instagram không hợp lệ.');
+  if (!/^https?:\/\/(?:www\.)?instagram\.com(?:\/|$)/i.test(s) || !/^https?:\/\/[^\s/]+(?:\/[^\s]*)?$/i.test(s)) {
+    throw new Error('Vui lòng nhập link Instagram hợp lệ.');
+  }
   return s;
 }
 
@@ -238,14 +241,9 @@ function canPayOrder(status, paymentStatus, paymentMethod) {
     !/đã thanh toán|paid/i.test(String(paymentStatus || ''));
 }
 
-async function hasOrdered(env, phone) {
-  const { results } = await env.DB.prepare('SELECT status FROM orders WHERE phone = ?').bind(phone).all();
-  return results.some(r => !isCancelledStatus(r.status));
-}
-
-function pointsFor(env, lines, isFirstOrder) {
+function pointsFor(env, lines) {
   const boxes = lines.reduce((sum, l) => sum + (Number(l.qty) || 0), 0);
-  return boxes * cfg(env, 'POINTS_PER_BOX') + (isFirstOrder ? cfg(env, 'FIRST_ORDER_BONUS') : 0);
+  return boxes * cfg(env, 'POINTS_PER_BOX');
 }
 
 function buildCheckout(user, phone, c) {
@@ -292,8 +290,7 @@ async function createOrder(b, ctx) {
     total += (Number(m.price) || 0) * qty;
   }
 
-  const isFirstOrder = !(await hasOrdered(ctx.env, phone));
-  const earned = pointsFor(ctx.env, lines, isFirstOrder);
+  const earned = pointsFor(ctx.env, lines);
   const orderId = 'BL' + formatCompact(new Date()) + '-' + Math.random().toString(36).slice(2, 5).toUpperCase();
   const createdAt = new Date().toISOString();
   const paymentStatus = checkout.paymentMethod === 'Thanh toán trước' ? 'Cần gửi minh chứng' : 'Thanh toán khi nhận hàng';
@@ -310,7 +307,7 @@ async function createOrder(b, ctx) {
     checkout.pickupDate, checkout.pickupTime, checkout.paymentMethod, paymentStatus
   ).run();
 
-  return { orderId, total, pointsEarned: earned, points: Number(user.points) || 0, isFirstOrder, paymentMethod: checkout.paymentMethod };
+  return { orderId, total, pointsEarned: earned, points: Number(user.points) || 0, paymentMethod: checkout.paymentMethod };
 }
 
 async function requireCustomerOrder(env, token, orderId) {
@@ -354,12 +351,11 @@ async function myOrders(b, ctx) {
 
 async function myPoints(b, ctx) {
   const u = await requireUser(ctx.env, b.token);
-  const hasOrd = await hasOrdered(ctx.env, u.phone);
   return {
-    points: Number(u.points) || 0, name: u.name || '', isAdmin: !!u.is_admin, hasOrdered: hasOrd,
+    points: Number(u.points) || 0, name: u.name || '', isAdmin: !!u.is_admin,
     rule: {
       pointsPerBox: cfg(ctx.env, 'POINTS_PER_BOX'),
-      firstOrderBonus: cfg(ctx.env, 'FIRST_ORDER_BONUS'),
+      signupBonus: cfg(ctx.env, 'SIGNUP_BONUS'),
       freeBoxPoints: cfg(ctx.env, 'FREE_BOX_POINTS')
     }
   };

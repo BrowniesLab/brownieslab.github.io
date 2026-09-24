@@ -12,7 +12,7 @@ database_id = "a51e2f70-24f3-44c2-af8a-5970dadf3a61"
 # Ảnh minh chứng thanh toán lưu thẳng trong D1 (base64), không cần dịch vụ lưu trữ ngoài.
 [vars]
 POINTS_PER_BOX = "1"
-FIRST_ORDER_BONUS = "2"
+SIGNUP_BONUS = "2"
 FREE_BOX_POINTS = "10"
 SESSION_DAYS = "30"
 MAX_LOGIN_FAILS = "5"

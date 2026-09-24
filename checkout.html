@@ -81,7 +81,7 @@
     const session = requireSession();
     const $ = (id) => document.getElementById(id);
     const CHECKOUT_KEY = 'brownieslab.checkout';
-    let draft = null, menu = [], pointRule = { pointsPerBox: 1, firstOrderBonus: 2 }, hasOrdered = false;
+    let draft = null, menu = [], pointRule = { pointsPerBox: 1, signupBonus: 2 };
 
     try { draft = JSON.parse(sessionStorage.getItem(CHECKOUT_KEY) || 'null'); } catch (e) {}
     if (!session || !draft || !Array.isArray(draft.items) || !draft.items.length) location.replace('order.html');
@@ -106,12 +106,12 @@
     $('same-recipient').addEventListener('change', toggleRecipient);
     document.querySelectorAll('[name=fulfillment]').forEach(el => el.addEventListener('change', toggleFulfillment));
 
-    function estimatePoints(count) { return count * pointRule.pointsPerBox + (hasOrdered ? 0 : pointRule.firstOrderBonus); }
+    function estimatePoints(count) { return count * pointRule.pointsPerBox; }
     async function init() {
       renderDates();
       try {
         const [activeMenu, p] = await Promise.all([apiGet('getMenu'), api('myPoints')]);
-        menu = activeMenu; pointRule = p.rule; hasOrdered = Boolean(p.hasOrdered);
+        menu = activeMenu; pointRule = { ...pointRule, ...(p.rule || {}) };
         const lines = draft.items.map(i => {
           const m = menu.find(x => x.itemId === i.itemId);
           return m ? { ...m, qty: Number(i.qty) || 0 } : null;

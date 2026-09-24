@@ -1,7 +1,7 @@
 # Brownies Lab — backend Cloudflare Worker (thay thế Apps Script)
 
-Backend tương đương `Code.gs`, nhưng dùng D1 (SQL) làm database và R2 để lưu ảnh minh chứng
-chuyển khoản, thay cho Google Sheet + Drive. Giữ nguyên toàn bộ tên action và hình dạng dữ liệu
+Backend tương đương `Code.gs`, nhưng dùng D1 (SQL) làm database và lưu ảnh minh chứng
+chuyển khoản trong D1, thay cho Google Sheet + Drive. Giữ nguyên toàn bộ tên action và hình dạng dữ liệu
 trả về, nên `app.js`/`admin.html`/`payment.html`... **không cần sửa gì**, chỉ đổi `API_URL`.
 
 ## ⚠️ Trước khi chuyển hẳn
@@ -17,7 +17,7 @@ song song để test trước (không đổi `API_URL` thật) rồi mới chuy�
 ```
 worker/
   schema.sql      Tạo 5 bảng D1 (users, menu, orders, sessions, login_attempts) + món mẫu
-  wrangler.toml   Config Worker, binding D1 (DB) + R2 (PROOFS), các biến điểm thưởng
+  wrangler.toml   Config Worker, binding D1 (DB), các biến điểm thưởng
   src/index.js    Toàn bộ backend
 ```
 
@@ -36,14 +36,11 @@ wrangler d1 create brownies-lab-db
 # 3. Tạo bảng
 wrangler d1 execute brownies-lab-db --file=schema.sql
 
-# 4. Tạo R2 bucket lưu ảnh minh chứng thanh toán
-wrangler r2 bucket create brownies-lab-proofs
-
-# 5. Đặt secret PIN_SALT (chuỗi ngẫu nhiên dài, đổi trước khi có người dùng thật)
+# 4. Đặt secret PIN_SALT (chuỗi ngẫu nhiên dài, đổi trước khi có người dùng thật)
 wrangler secret put PIN_SALT
 # ví dụ tạo chuỗi ngẫu nhiên: openssl rand -hex 32
 
-# 6. Deploy
+# 5. Deploy
 wrangler deploy
 ```
 
@@ -72,7 +69,7 @@ URL giữ nguyên, không cần sửa lại `app.js`.
 
 ## Đổi công thức điểm / QR thanh toán (không cần sửa code)
 
-Sửa trực tiếp mục `[vars]` trong `wrangler.toml` (POINTS_PER_BOX, FIRST_ORDER_BONUS, FREE_BOX_POINTS,
+Sửa trực tiếp mục `[vars]` trong `wrangler.toml` (POINTS_PER_BOX, SIGNUP_BONUS, FREE_BOX_POINTS,
 SESSION_DAYS, MAX_LOGIN_FAILS, LOCK_MINUTES, NEW_ORDER_STATUS, PAYMENT_QR_URL) rồi `wrangler deploy` lại.
 
 ## Khác biệt so với bản Apps Script
