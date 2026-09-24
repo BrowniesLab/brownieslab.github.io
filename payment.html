@@ -61,6 +61,7 @@
           }), 'Đang gửi ảnh…');
           payment.paymentStatus = result.paymentStatus; payment.proofUrl = result.proofUrl; renderPayment(payment);
           toast('Đã gửi ảnh. Brownies Lab sẽ xác nhận thanh toán sớm.', 'success');
+          setTimeout(() => location.replace('payment-success.html'), 700);
         } catch (err) { handleError(err); }
       };
       reader.readAsDataURL(file);
