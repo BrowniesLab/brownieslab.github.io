@@ -1,2 +1,6 @@
 .DS_Store
 *.swp
+worker/.wrangler/
+worker/node_modules/
+*.json.key
+gen-lang-client-*.json

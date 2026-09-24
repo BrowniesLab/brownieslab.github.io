@@ -44,7 +44,10 @@ CREATE TABLE IF NOT EXISTS orders (
   pickup_time TEXT NOT NULL DEFAULT '',
   payment_method TEXT NOT NULL DEFAULT '',
   payment_status TEXT NOT NULL DEFAULT '',
-  payment_proof_url TEXT NOT NULL DEFAULT ''
+  payment_proof_url TEXT NOT NULL DEFAULT '',
+  -- Ảnh minh chứng thanh toán lưu thẳng trong D1 (base64), không phụ thuộc dịch vụ ngoài.
+  payment_proof_mime TEXT NOT NULL DEFAULT '',
+  payment_proof_data TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_orders_phone ON orders(phone);
 

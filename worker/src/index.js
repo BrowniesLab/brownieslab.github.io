@@ -2,7 +2,9 @@
  * Brownies Lab — backend Cloudflare Worker (thay cho Apps Script/Code.gs)
  *
  * Database: D1 (binding "DB", xem schema.sql).
- * Ảnh minh chứng thanh toán: R2 (binding "PROOFS"), phục vụ lại qua GET /proof/<key>.
+ * Ảnh minh chứng thanh toán: lưu base64 thẳng trong D1 (cột payment_proof_mime/payment_proof_data
+ * của bảng orders), phục vụ lại qua GET /proof/<orderId>. Không phụ thuộc R2/Google Drive —
+ * Service Account không dùng được (không có dung lượng Drive riêng khi không có Workspace).
  *
  * Giữ đúng tên action và hình dạng {ok,data}/{ok,error} như bản Apps Script,
  * nên app.js chỉ cần đổi API_URL, không cần sửa gì khác.
@@ -57,13 +59,13 @@ function jsonRes(obj, cors) {
 }
 
 async function serveProof(url, env, cors) {
-  const key = decodeURIComponent(url.pathname.slice('/proof/'.length));
-  const obj = key ? await env.PROOFS.get(key) : null;
-  if (!obj) return new Response('Không tìm thấy ảnh.', { status: 404, headers: cors });
+  const orderId = decodeURIComponent(url.pathname.slice('/proof/'.length));
+  const order = orderId ? await env.DB.prepare('SELECT payment_proof_mime, payment_proof_data FROM orders WHERE order_id = ?').bind(orderId).first() : null;
+  if (!order || !order.payment_proof_data) return new Response('Không tìm thấy ảnh.', { status: 404, headers: cors });
   const headers = new Headers(cors);
-  headers.set('Content-Type', (obj.httpMetadata && obj.httpMetadata.contentType) || 'application/octet-stream');
-  headers.set('Cache-Control', 'public, max-age=31536000, immutable');
-  return new Response(obj.body, { headers });
+  headers.set('Content-Type', order.payment_proof_mime || 'application/octet-stream');
+  headers.set('Cache-Control', 'private, max-age=86400');
+  return new Response(base64ToBytes(order.payment_proof_data), { headers });
 }
 
 // ===================== ACTIONS =====================
@@ -386,15 +388,12 @@ async function uploadPaymentProof(b, ctx) {
   const bytes = base64ToBytes(String(b.base64 || ''));
   if (!bytes.length || bytes.length > 4 * 1024 * 1024) throw new Error('Ảnh chuyển khoản phải nhỏ hơn 4 MB.');
 
-  const safeName = String(b.filename || 'payment-proof').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
-  const key = order.order_id + '-' + Date.now() + '-' + safeName;
-  await ctx.env.PROOFS.put(key, bytes, { httpMetadata: { contentType: mimeType } });
-
   const origin = new URL(ctx.request.url).origin;
-  const url = origin + '/proof/' + encodeURIComponent(key);
+  const url = origin + '/proof/' + encodeURIComponent(order.order_id);
 
-  await ctx.env.DB.prepare("UPDATE orders SET payment_proof_url = ?, payment_status = 'Chờ xác nhận thanh toán' WHERE id = ?")
-    .bind(url, order.id).run();
+  await ctx.env.DB.prepare(
+    "UPDATE orders SET payment_proof_url = ?, payment_proof_mime = ?, payment_proof_data = ?, payment_status = 'Chờ xác nhận thanh toán' WHERE id = ?"
+  ).bind(url, mimeType, bytesToBase64(bytes), order.id).run();
 
   return { proofUrl: url, paymentStatus: 'Chờ xác nhận thanh toán' };
 }
@@ -404,6 +403,11 @@ function base64ToBytes(b64) {
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes;
+}
+
+function bytesToBase64(bytes) {
+  let bin = ''; for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
 }
 
 // ===================== ADMIN (generic theo "sheet") =====================

@@ -7,15 +7,9 @@ compatibility_date = "2026-09-24"
 [[d1_databases]]
 binding = "DB"
 database_name = "brownies-lab-db"
-database_id = "PASTE_DATABASE_ID_HERE"
+database_id = "a51e2f70-24f3-44c2-af8a-5970dadf3a61"
 
-# 2) wrangler r2 bucket create brownies-lab-proofs
-[[r2_buckets]]
-binding = "PROOFS"
-bucket_name = "brownies-lab-proofs"
-
-# Có thể sửa trực tiếp các giá trị dưới đây rồi `wrangler deploy` lại, không cần sửa code.
-# (Tương đương Script Properties của bản Apps Script cũ.)
+# Ảnh minh chứng thanh toán lưu thẳng trong D1 (base64), không cần dịch vụ lưu trữ ngoài.
 [vars]
 POINTS_PER_BOX = "1"
 FIRST_ORDER_BONUS = "2"
