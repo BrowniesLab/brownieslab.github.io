@@ -1,8 +1,7 @@
 /* Brownies Lab — dùng chung cho mọi trang: gọi API + quản lý phiên đăng nhập */
 
-// Khi deploy Worker: thay bằng URL https://brownies-lab.<subdomain>.workers.dev.
-// Tạm giữ URL Apps Script hiện tại để website không ngắt trước khi Worker được deploy.
-const API_URL = 'https://script.google.com/macros/s/AKfycbxJg7gvKQLzhFfz4VIiFp3LJUpq14JnRuT0NzhZmBJCB9pXQNbH5mNKvtE3dTCrcOkl/exec';
+// Backend: Cloudflare Worker + D1 (thay cho Apps Script/Google Sheet).
+const API_URL = 'https://brownies-lab.brownieslab.workers.dev';
 
 const SESSION_KEY = 'brownieslab.session';
 
