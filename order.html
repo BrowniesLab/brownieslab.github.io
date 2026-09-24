@@ -23,7 +23,6 @@
   <div class="order-wrap">
     <section class="order-info" aria-label="Thông tin đợt đặt bánh">
       <div class="order-info-head">
-        <p class="eyebrow">Đợt brownie tuần này</p>
         <h1>Lịch nhận bánh &amp; giao hàng</h1>
       </div>
       <div class="order-info-grid">
@@ -38,7 +37,7 @@
     <section class="points" aria-live="polite">
       <span class="num" id="points">…</span>
       <span class="label">điểm thưởng</span>
-      <span class="rule" id="points-rule"></span>
+      <ul class="rule" id="points-rule"></ul>
     </section>
 
     <!-- Tabs -->
@@ -147,10 +146,21 @@
 
     const estimatePoints = (boxes) => boxes ? boxes * rule.pointsPerBox : 0;
 
+    function restoreCartForEdit() {
+      if (new URLSearchParams(location.search).get('edit') !== '1') return;
+      try {
+        const draft = JSON.parse(sessionStorage.getItem('brownieslab.checkout') || 'null');
+        (draft && Array.isArray(draft.items) ? draft.items : []).forEach((item) => {
+          if (item && item.itemId && Number(item.qty) > 0) cart.set(String(item.itemId), Number(item.qty));
+        });
+      } catch (e) { /* Không có giỏ cũ để khôi phục. */ }
+    }
+
     async function init() {
       refreshPoints();
       try {
         menu = await apiGet('getMenu');
+        restoreCartForEdit();
         renderMenu();
       } catch (err) {
         $('menu').innerHTML = '<li class="empty">Không tải được menu.</li>';
@@ -163,8 +173,16 @@
         const p = await api('myPoints');
         rule = { ...rule, ...(p.rule || {}) };
         $('points').textContent = p.points;
-        $('points-rule').textContent =
-          `Tạo tài khoản +${rule.signupBonus} điểm · 1 hộp = ${rule.pointsPerBox} điểm · ${rule.freeBoxPoints} điểm = 1 hộp miễn phí.`;
+        const rules = [
+          `Tạo tài khoản: +${rule.signupBonus} điểm`,
+          `Mỗi hộp bánh: +${rule.pointsPerBox} điểm`,
+          `${rule.freeBoxPoints} điểm đổi 1 hộp miễn phí`
+        ];
+        $('points-rule').replaceChildren(...rules.map((text) => {
+          const item = document.createElement('li');
+          item.textContent = text;
+          return item;
+        }));
         $('admin-link').hidden = !p.isAdmin;
         Session.update({ points: p.points, name: p.name, isAdmin: p.isAdmin });
         renderCart();

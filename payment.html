@@ -22,6 +22,7 @@
         <img id="proof-preview" class="proof-preview" alt="Xem trước ảnh chuyển khoản" hidden>
         <button class="btn btn-primary btn-block" id="upload-proof" type="button" disabled>Gửi ảnh xác nhận thanh toán</button>
       </div>
+      <button class="btn btn-block" id="edit-order" type="button" hidden style="margin-top:.75rem">Quay lại chỉnh đơn</button>
       <a class="btn btn-block" href="order.html?tab=history" style="margin-top:.75rem">Xem đơn hàng của tôi</a>
     </div>
   </main>
@@ -39,6 +40,7 @@
       $('payment-state').className = 'payment-state';
       $('payment-state').textContent = `Trạng thái thanh toán: ${data.paymentStatus}`;
       $('payment-content').hidden = false;
+      $('edit-order').hidden = data.paymentStatus !== 'Cần gửi minh chứng' || !sessionStorage.getItem('brownieslab.checkout');
       const qrUrl = data.qrUrl || 'metadata/qr.jpg';
       $('qr-box').innerHTML = `<img src="${escapeHtml(qrUrl)}" alt="Mã QR thanh toán"><span>Quét mã QR để thanh toán ${formatVND(data.total)}</span>`;
       if (data.proofUrl) { $('payment-state').innerHTML = `Trạng thái thanh toán: <strong>${escapeHtml(data.paymentStatus)}</strong> · <a href="${escapeHtml(data.proofUrl)}" target="_blank" rel="noopener noreferrer">Xem ảnh đã gửi</a>`; }
@@ -61,10 +63,19 @@
           }), 'Đang gửi ảnh…');
           payment.paymentStatus = result.paymentStatus; payment.proofUrl = result.proofUrl; renderPayment(payment);
           toast('Đã gửi ảnh. Brownies Lab sẽ xác nhận thanh toán sớm.', 'success');
+          sessionStorage.removeItem('brownieslab.checkout');
+          sessionStorage.removeItem('brownieslab.checkout.form');
           setTimeout(() => location.replace('payment-success.html'), 700);
         } catch (err) { handleError(err); }
       };
       reader.readAsDataURL(file);
+    });
+    $('edit-order').addEventListener('click', async () => {
+      if (!confirm('Đơn chờ thanh toán này sẽ được huỷ để bạn chỉnh lại món. Bạn có muốn tiếp tục?')) return;
+      try {
+        await withBusy($('edit-order'), () => api('cancelOrder', { orderId }), 'Đang quay lại…');
+        location.replace('order.html?edit=1');
+      } catch (err) { handleError(err); }
     });
     if (session && orderId) init();
   </script>

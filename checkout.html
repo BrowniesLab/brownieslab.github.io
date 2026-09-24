@@ -37,7 +37,7 @@
             <label class="choice-card"><input type="radio" name="fulfillment" value="delivery"><span>Giao tận nơi</span></label>
           </div>
           <div id="pickup-fields">
-            <label class="field"><span>Toà nhà, phòng học/giảng đường, tầng <span class="muted" style="font-weight:400">(nếu có)</span></span><textarea id="pickup-location" rows="2" maxlength="300" placeholder="Ví dụ: Toà A1, phòng 302, tầng 3"></textarea></label>
+            <label class="field"><span>Toà nhà, phòng học/giảng đường, tầng</span><textarea id="pickup-location" rows="2" maxlength="300" placeholder="Ví dụ: Toà A1, phòng 302, tầng 3"></textarea></label>
           </div>
           <div id="delivery-fields" hidden>
             <label class="field"><span>Địa chỉ giao bánh</span><textarea id="delivery-address" rows="3" maxlength="500" placeholder="Ghi chi tiết địa chỉ để Brownies Lab tính khoảng cách và báo phí ship chính xác."></textarea></label>
@@ -71,7 +71,7 @@
 
       <aside class="checkout-receipt">
         <h2>Đơn của bạn</h2>
-        <div id="checkout-lines" class="loading" style="height:7rem"></div>
+        <div id="checkout-lines" class="loading"></div>
       </aside>
     </div>
   </main>
@@ -81,9 +81,12 @@
     const session = requireSession();
     const $ = (id) => document.getElementById(id);
     const CHECKOUT_KEY = 'brownieslab.checkout';
+    const CHECKOUT_FORM_KEY = 'brownieslab.checkout.form';
     let draft = null, menu = [], pointRule = { pointsPerBox: 1, signupBonus: 2 };
+    let savedCheckout = null;
 
     try { draft = JSON.parse(sessionStorage.getItem(CHECKOUT_KEY) || 'null'); } catch (e) {}
+    try { savedCheckout = JSON.parse(sessionStorage.getItem(CHECKOUT_FORM_KEY) || 'null'); } catch (e) {}
     if (!session || !draft || !Array.isArray(draft.items) || !draft.items.length) location.replace('order.html');
 
     function renderDates() {
@@ -103,12 +106,43 @@
       const pickup = document.querySelector('[name=fulfillment]:checked').value === 'pickup';
       $('pickup-fields').hidden = !pickup; $('delivery-fields').hidden = pickup;
     }
+    function updatePaymentMethodNote() {
+      const prepaid = document.querySelector('[name=payment-method]:checked').value === 'prepaid';
+      $('payment-method-note').textContent = prepaid
+        ? 'Sau khi tạo đơn, bạn cần quét QR và tải ảnh chuyển khoản để Brownies Lab xác nhận.'
+        : 'Bạn thanh toán khi Brownies Lab giao/đưa bánh.';
+    }
+    function readCheckout() {
+      return {
+        sameRecipient: $('same-recipient').checked,
+        recipientName: $('recipient-name').value.trim(), recipientPhone: $('recipient-phone').value.trim(),
+        recipientMessage: $('recipient-message').value.trim(),
+        fulfillmentType: document.querySelector('[name=fulfillment]:checked').value,
+        pickupLocation: $('pickup-location').value.trim(), deliveryAddress: $('delivery-address').value.trim(),
+        pickupDate: $('pickup-date').value, pickupTime: $('pickup-time').value,
+        note: $('note').value.trim(), paymentMethod: document.querySelector('[name=payment-method]:checked').value
+      };
+    }
+    function restoreCheckout(data) {
+      if (!data || typeof data !== 'object') return;
+      $('same-recipient').checked = data.sameRecipient !== false;
+      ['recipientName', 'recipientPhone', 'recipientMessage', 'pickupLocation', 'deliveryAddress', 'note'].forEach((key) => {
+        const field = $(key.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase()));
+        if (field && data[key] !== undefined) field.value = data[key];
+      });
+      if (data.fulfillmentType === 'delivery') document.querySelector('[name=fulfillment][value=delivery]').checked = true;
+      if (data.paymentMethod === 'prepaid') document.querySelector('[name=payment-method][value=prepaid]').checked = true;
+      if ([...$('pickup-date').options].some((option) => option.value === data.pickupDate)) $('pickup-date').value = data.pickupDate;
+      if (data.pickupTime) $('pickup-time').value = data.pickupTime;
+      toggleRecipient(); toggleFulfillment(); updatePaymentMethodNote();
+    }
     $('same-recipient').addEventListener('change', toggleRecipient);
     document.querySelectorAll('[name=fulfillment]').forEach(el => el.addEventListener('change', toggleFulfillment));
 
     function estimatePoints(count) { return count * pointRule.pointsPerBox; }
     async function init() {
       renderDates();
+      restoreCheckout(savedCheckout);
       try {
         const [activeMenu, p] = await Promise.all([apiGet('getMenu'), api('myPoints')]);
         menu = activeMenu; pointRule = { ...pointRule, ...(p.rule || {}) };
@@ -126,34 +160,26 @@
 
     $('checkout-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const sameRecipient = $('same-recipient').checked;
-      const fulfillmentType = document.querySelector('[name=fulfillment]:checked').value;
-      const paymentMethod = document.querySelector('[name=payment-method]:checked').value;
+      const checkout = readCheckout();
+      const paymentMethod = checkout.paymentMethod;
       try {
+        sessionStorage.setItem(CHECKOUT_FORM_KEY, JSON.stringify(checkout));
         const r = await withBusy($('place-order'), () => api('createOrder', {
           items: draft.items,
-          checkout: {
-            sameRecipient,
-            recipientName: $('recipient-name').value.trim(), recipientPhone: $('recipient-phone').value.trim(),
-            recipientMessage: $('recipient-message').value.trim(), fulfillmentType,
-            pickupLocation: $('pickup-location').value.trim(), deliveryAddress: $('delivery-address').value.trim(),
-            pickupDate: $('pickup-date').value, pickupTime: $('pickup-time').value, note: $('note').value.trim(), paymentMethod
-          }
+          checkout
         }), 'Đang tạo đơn…');
-        sessionStorage.removeItem(CHECKOUT_KEY);
         Session.update({ points: r.points });
-        location.replace(paymentMethod === 'prepaid'
-          ? 'payment.html?order=' + encodeURIComponent(r.orderId)
-          : 'order.html?tab=history');
+        if (paymentMethod === 'prepaid') {
+          location.replace('payment.html?order=' + encodeURIComponent(r.orderId));
+        } else {
+          sessionStorage.removeItem(CHECKOUT_KEY);
+          sessionStorage.removeItem(CHECKOUT_FORM_KEY);
+          location.replace('order-success.html');
+        }
       } catch (err) { handleError(err); }
     });
 
-    document.querySelectorAll('[name=payment-method]').forEach(el => el.addEventListener('change', () => {
-      const prepaid = document.querySelector('[name=payment-method]:checked').value === 'prepaid';
-      $('payment-method-note').textContent = prepaid
-        ? 'Sau khi tạo đơn, bạn cần quét QR và tải ảnh chuyển khoản để Brownies Lab xác nhận.'
-        : 'Bạn thanh toán khi Brownies Lab giao/đưa bánh.';
-    }));
+    document.querySelectorAll('[name=payment-method]').forEach(el => el.addEventListener('change', updatePaymentMethodNote));
 
     if (session && draft) init();
   </script>

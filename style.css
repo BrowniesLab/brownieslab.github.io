@@ -141,7 +141,7 @@ main { max-width: var(--wrap); margin: 0 auto; padding: 2rem 1.25rem 7rem; }
 }
 .points .num { font-family: var(--font-d); font-size: 2.4rem; font-weight: 700; color: var(--dark); line-height: 1; }
 .points .label { font-weight: 600; }
-.points .rule { flex-basis: 100%; font-size: .82rem; color: var(--muted); }
+.points .rule { flex-basis: 100%; margin: .2rem 0 0 1.15rem; padding: 0; font-size: .82rem; color: var(--muted); line-height: 1.55; }
 
 /* ── TABS ────────────────────────────────────────────── */
 .tabs {
@@ -171,6 +171,8 @@ main { max-width: var(--wrap); margin: 0 auto; padding: 2rem 1.25rem 7rem; }
 .field input:focus,.field textarea:focus,.field select:focus { outline: none; border-color: var(--pink); box-shadow: 0 0 0 3px rgba(255,194,194,.3); }
 button:focus-visible,a:focus-visible { outline: 2.5px solid var(--pink); outline-offset: 2px; border-radius: 4px; }
 .field .hint { font-size: .8rem; color: var(--muted); margin-top: .3rem; }
+.forgot-pin-link { color: var(--brown); font-weight: 700; text-decoration: underline; text-underline-offset: .16em; }
+.forgot-pin-link:hover { color: var(--brown); }
 input.pin { letter-spacing: .5em; font-variant-numeric: tabular-nums; }
 
 /* ── BUTTONS ─────────────────────────────────────────── */
@@ -223,7 +225,7 @@ body.auth-page main { animation: none; }
   background: rgba(255,194,194,.42); pointer-events: none; z-index: 1;
 }
 .auth-brand > :not(.auth-bakes) { position: relative; z-index: 2; }
-.auth-bakes { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.auth-bakes { display: none; }
 .auth-hero-photo {
   position: absolute; left: 30%; bottom: var(--login-photo-bottom); display: block;
   /* Ảnh nằm ngang nên sau khi xoay, chiều rộng này chính là chiều cao hiển thị. */
@@ -253,8 +255,9 @@ body.auth-page main { animation: none; }
 }
 a.social-link:hover { background: var(--pink); transform: translateY(-1px); }
 .auth-form {
-  flex: 1; background: var(--bg);
-  padding: 3.5rem 3rem;
+  flex: 1; position: relative;
+  background: #fff;
+  padding: clamp(2rem, 5vw, 3.5rem) clamp(1.5rem, 4vw, 3rem);
   display: flex; flex-direction: column; justify-content: center;
   animation: fadeUp .5s .1s var(--ease) both;
 }
@@ -274,12 +277,12 @@ a.social-link:hover { background: var(--pink); transform: translateY(-1px); }
   .auth-brand::after { display: none; }
   .auth-brand .brand { font-size: 1.25rem; }
   .brand-logo { width: 2.45rem; height: 2.45rem; }
-  .auth-mobile-intro { display: grid; width: 100%; justify-items: center; gap: .8rem; margin: 0 0 1.6rem; }
-  .auth-mobile-photo-frame { width: 100%; aspect-ratio: 1 / 1; overflow: hidden; border-radius: var(--r-lg); box-shadow: var(--sh-md); }
-  .auth-mobile-photo { display: block; width: 100%; height: 100%; max-width: none; max-height: none; object-fit: contain; transform: rotate(-90deg) scaleY(1.9); }
-  .auth-mobile-social { display: flex; justify-content: center; gap: .55rem; flex-wrap: wrap; }
+  .auth-mobile-intro { display: block; position: absolute; inset: 0; margin: 0; pointer-events: none; z-index: 1; }
+  .auth-mobile-photo-frame { display: none; }
+  .auth-form > :not(.auth-mobile-intro) { position: relative; z-index: 3; }
+  .auth-mobile-social { display: flex; position: absolute; right: 1.25rem; bottom: 1.5rem; left: 1.25rem; z-index: 2; justify-content: center; gap: .55rem; flex-wrap: wrap; pointer-events: auto; }
   .auth-mobile-social .social-link { min-height: 2.25rem; }
-  .auth-form { padding: 1.5rem 1.25rem 5rem; justify-content: flex-start; }
+  .auth-form { padding: clamp(1.25rem, 5vw, 1.5rem) clamp(1rem, 5vw, 1.25rem) max(5rem, env(safe-area-inset-bottom)); justify-content: flex-start; }
   .auth-form h2 { font-size: 1.35rem; }
 }
 
@@ -448,6 +451,7 @@ a.social-link:hover { background: var(--pink); transform: translateY(-1px); }
 .choice-card input:checked + span { border-color: var(--dark); background: var(--card); box-shadow: 0 0 0 2px rgba(255,194,194,.35); }
 .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
 .checkout-receipt { position: static; padding: 1.2rem; }
+.checkout-receipt .loading { min-height: 7rem; }
 .checkout-items { list-style: none; padding: 0; margin: 0 0 .75rem; font-size: .875rem; }
 .checkout-items li { display: flex; justify-content: space-between; gap: .75rem; padding: .35rem 0; }
 .checkout-items strong { white-space: nowrap; font-variant-numeric: tabular-nums; }
