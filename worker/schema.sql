@@ -84,9 +84,18 @@ CREATE TABLE IF NOT EXISTS login_attempts (
   locked_until TEXT
 );
 
--- 4 món mẫu, giống hàm setup() của Code.gs. Sửa/xoá/thêm lại qua trang admin sau khi deploy.
-INSERT OR IGNORE INTO menu (item_id, name, price, description, active) VALUES
-  ('FUDGE',    'Brownie Fudge cổ điển', 35000,  'Dark chocolate 70%, mặt bánh nứt giòn, ruột ẩm dẻo.', 1),
-  ('SALTCARA', 'Brownie Caramel muối',  42000,  'Sốt caramel nấu tay, rắc muối biển.', 1),
-  ('WALNUT',   'Brownie Óc chó',        40000,  'Óc chó rang bơ, vị bùi.', 1),
-  ('BOX6',     'Hộp mix 6 miếng',       220000, '2 Fudge, 2 Caramel muối, 2 Óc chó.', 1);
+-- 4 món mẫu, chỉ chèn khi Menu chưa có món THẬT nào (chưa từng sửa qua admin).
+-- Chạy file này lại lần sau (vd sau khi thêm bảng mới) sẽ KHÔNG tái chèn món mẫu
+-- một khi Menu đã có món thật — sửa/xoá/thêm món thật qua trang admin.
+INSERT OR IGNORE INTO menu (item_id, name, price, description, active)
+SELECT 'FUDGE', 'Brownie Fudge cổ điển', 35000, 'Dark chocolate 70%, mặt bánh nứt giòn, ruột ẩm dẻo.', 1
+WHERE NOT EXISTS (SELECT 1 FROM menu WHERE item_id NOT IN ('FUDGE', 'SALTCARA', 'WALNUT', 'BOX6'));
+INSERT OR IGNORE INTO menu (item_id, name, price, description, active)
+SELECT 'SALTCARA', 'Brownie Caramel muối', 42000, 'Sốt caramel nấu tay, rắc muối biển.', 1
+WHERE NOT EXISTS (SELECT 1 FROM menu WHERE item_id NOT IN ('FUDGE', 'SALTCARA', 'WALNUT', 'BOX6'));
+INSERT OR IGNORE INTO menu (item_id, name, price, description, active)
+SELECT 'WALNUT', 'Brownie Óc chó', 40000, 'Óc chó rang bơ, vị bùi.', 1
+WHERE NOT EXISTS (SELECT 1 FROM menu WHERE item_id NOT IN ('FUDGE', 'SALTCARA', 'WALNUT', 'BOX6'));
+INSERT OR IGNORE INTO menu (item_id, name, price, description, active)
+SELECT 'BOX6', 'Hộp mix 6 miếng', 220000, '2 Fudge, 2 Caramel muối, 2 Óc chó.', 1
+WHERE NOT EXISTS (SELECT 1 FROM menu WHERE item_id NOT IN ('FUDGE', 'SALTCARA', 'WALNUT', 'BOX6'));
