@@ -53,8 +53,8 @@
 
   <script src="app.js"></script>
   <script>
-    const SHEETS = ['Orders','Users','Menu','Sessions'];
-    const LABELS = { Orders:'Đơn hàng', Users:'Khách hàng', Menu:'Menu', Sessions:'Phiên đăng nhập' };
+    const SHEETS = ['Orders','Redemptions','Users','Menu','Sessions'];
+    const LABELS = { Orders:'Đơn hàng', Redemptions:'Đổi điểm', Users:'Khách hàng', Menu:'Menu', Sessions:'Phiên đăng nhập' };
     const session = requireSession({ admin: true });
     const $ = (id) => document.getElementById(id);
 
@@ -83,6 +83,7 @@
     if (session) load();
 
     async function load() {
+      $('add').hidden = current === 'Redemptions';
       $('grid').innerHTML = '<tbody><tr><td class="loading" style="height:3rem"></td></tr></tbody>';
       try {
         table = await api('adminListSheet', { sheet: current });
@@ -128,7 +129,8 @@
         Name: 'Họ và tên', Points: 'Điểm thưởng', IsAdmin: 'Quyền quản trị',
         CreatedAt: 'Ngày tạo', SocialLink: 'Liên kết mạng xã hội',
         ItemID: 'Mã món', Description: 'Mô tả', Active: 'Đang bán', Price: 'Giá bán',
-        Token: 'Mã phiên', ExpiresAt: 'Hết hạn'
+        Token: 'Mã phiên', ExpiresAt: 'Hết hạn', RedemptionID: 'Mã yêu cầu',
+        ItemName: 'Vị bánh', Quantity: 'Số hộp đổi', PointsSpent: 'Điểm đã trừ'
       };
       return labels[header] || header;
     }
@@ -210,11 +212,11 @@
       $('editor-title').textContent = row
         ? (current === 'Orders' ? `Chi tiết đơn · ${orderValue(row, 'CustomerName') || 'Khách hàng'}` : `Sửa dòng ${row.rowIndex} · ${LABELS[current]}`)
         : `Thêm dòng · ${LABELS[current]}`;
-      $('editor-delete').hidden = !row;
+      $('editor-delete').hidden = !row || current === 'Redemptions';
       const orderDetail = current === 'Orders' && row ? `<div class="order-detail"><p><strong>Khách đặt:</strong> ${escapeHtml(orderValue(row, 'CustomerName'))} · ${escapeHtml(orderValue(row, 'Phone'))}</p><p><strong>Người nhận:</strong> ${escapeHtml(orderValue(row, 'RecipientName'))} · ${escapeHtml(orderValue(row, 'RecipientPhone'))}</p><p><strong>Đơn bánh:</strong> ${escapeHtml(orderItemsText(row))} · <strong>${formatVND(orderValue(row, 'Total'))}</strong></p><p><strong>Nhận hàng:</strong> ${escapeHtml(orderValue(row, 'FulfillmentType'))} · ${escapeHtml(orderValue(row, 'PickupDate'))} · ${escapeHtml(orderValue(row, 'PickupTime'))}</p>${orderValue(row, 'PickupLocation') ? `<p><strong>Điểm nhận:</strong> ${escapeHtml(orderValue(row, 'PickupLocation'))}</p>` : ''}${orderValue(row, 'DeliveryAddress') ? `<p><strong>Địa chỉ giao:</strong> ${escapeHtml(orderValue(row, 'DeliveryAddress'))}</p>` : ''}${orderValue(row, 'RecipientMessage') ? `<p><strong>Lời nhắn người nhận:</strong> ${escapeHtml(orderValue(row, 'RecipientMessage'))}</p>` : ''}${orderValue(row, 'Note') ? `<p><strong>Ghi chú đơn:</strong> ${escapeHtml(orderValue(row, 'Note'))}</p>` : ''}<p><strong>Thanh toán:</strong> ${escapeHtml(orderValue(row, 'PaymentMethod'))} · ${escapeHtml(orderValue(row, 'PaymentStatus'))} · ${/^true$/i.test(orderValue(row, 'PointsCredited')) ? 'Đã cộng điểm' : 'Chưa cộng điểm'}</p>${orderValue(row, 'PaymentProofUrl') ? `<p><a class="grid-link" href="${escapeHtml(orderValue(row, 'PaymentProofUrl'))}" target="_blank" rel="noopener noreferrer">Xem ảnh chuyển khoản</a></p>` : ''}${needsPaymentConfirmation(row) ? `<button class="btn btn-primary btn-sm" type="button" data-confirm-payment="${row.rowIndex}">Xác nhận thanh toán &amp; cộng điểm</button>` : ''}</div>` : '';
       $('editor-fields').innerHTML = orderDetail + table.headers.map((h,i) => {
         if (!h) return '';
-        if (current === 'Orders' && row && h !== 'Status') return '';
+        if ((current === 'Orders' || current === 'Redemptions') && row && h !== 'Status') return '';
         const v    = row ? cellText(row.values[i]) : '';
         const long = v.length > 60 || /json|note|description/i.test(h);
         const inp  = long
@@ -225,6 +227,7 @@
       $('editor-hint').textContent = current === 'Users'
         ? 'Mẹo: nhập PIN mới 4–6 số vào ô PinHash để đặt lại PIN. Đúng/sai nhập TRUE/FALSE.'
         : current === 'Orders' ? 'Chỉ sửa trạng thái đơn tại đây. Thanh toán và điểm được xác nhận bằng nút “Xác nhận TT & cộng điểm” ở thẻ đơn.'
+        : current === 'Redemptions' ? 'Chỉ cập nhật trạng thái yêu cầu. Số điểm đã trừ và lịch sử yêu cầu được khoá để tránh sai lệch điểm.'
         : 'Đúng/sai nhập TRUE/FALSE, ngày nhập dạng yyyy-mm-dd hh:mm.';
       $('editor').showModal();
     }

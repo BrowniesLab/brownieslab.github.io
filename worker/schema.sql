@@ -54,6 +54,20 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 CREATE INDEX IF NOT EXISTS idx_orders_phone ON orders(phone);
 
+CREATE TABLE IF NOT EXISTS redemptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  redemption_id TEXT NOT NULL UNIQUE,
+  phone TEXT NOT NULL,
+  customer_name TEXT NOT NULL DEFAULT '',
+  item_id TEXT NOT NULL DEFAULT '',
+  item_name TEXT NOT NULL DEFAULT '',
+  quantity INTEGER NOT NULL DEFAULT 0,
+  points_spent INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'Yêu cầu mới',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_redemptions_phone ON redemptions(phone);
+
 CREATE TABLE IF NOT EXISTS sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   token TEXT NOT NULL UNIQUE,

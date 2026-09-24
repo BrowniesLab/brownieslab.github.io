@@ -27,11 +27,12 @@ var SHEETS = {
   Orders:   ['OrderID', 'Phone', 'CustomerName', 'ItemsJSON', 'Total', 'PointsEarned', 'PointsCredited', 'Status', 'CreatedAt', 'Note',
              'RecipientName', 'RecipientPhone', 'RecipientMessage', 'FulfillmentType', 'PickupLocation',
              'DeliveryAddress', 'PickupDate', 'PickupTime', 'PaymentMethod', 'PaymentStatus', 'PaymentProofUrl'],
+  Redemptions: ['RedemptionID', 'Phone', 'CustomerName', 'ItemID', 'ItemName', 'Quantity', 'PointsSpent', 'Status', 'CreatedAt'],
   Sessions: ['Token', 'Phone', 'ExpiresAt']
 };
 
 // Cột luôn lưu dạng chữ (giữ số 0 đầu SĐT, không để Sheets tự đổi thành số/ngày)
-var TEXT_COLUMNS = ['Phone', 'PinHash', 'Token', 'OrderID', 'ItemID', 'ItemsJSON', 'Note', 'Name', 'CustomerName', 'Description', 'Status', 'SocialLink',
+var TEXT_COLUMNS = ['Phone', 'PinHash', 'Token', 'OrderID', 'RedemptionID', 'ItemID', 'ItemName', 'ItemsJSON', 'Note', 'Name', 'CustomerName', 'Description', 'Status', 'SocialLink',
   'RecipientName', 'RecipientPhone', 'RecipientMessage', 'FulfillmentType', 'PickupLocation', 'DeliveryAddress',
   'PickupDate', 'PickupTime', 'PaymentMethod', 'PaymentStatus', 'PaymentProofUrl'];
 
@@ -71,6 +72,8 @@ var ACTIONS = {
   cancelOrder:    function (b) { return withLock_(function () { return cancelOrder_(b.token, b.orderId); }); },
   myOrders:       function (b) { return myOrders_(b.token); },
   myPoints:       function (b) { return myPoints_(b.token); },
+  createRedemption: function (b) { return withLock_(function () { return createRedemption_(b.token, b.itemId, b.qty); }); },
+  myRedemptions:  function (b) { return myRedemptions_(b.token); },
   paymentInfo:    function (b) { return paymentInfo_(b.token, b.orderId); },
   uploadPaymentProof: function (b) { return withLock_(function () { return uploadPaymentProof_(b.token, b.orderId, b.filename, b.mimeType, b.base64); }); },
   adminListSheet: function (b) { return adminListSheet_(b.token, b.sheet); },
@@ -504,6 +507,55 @@ function myPoints_(token) {
   };
 }
 
+/** Đổi điểm lấy hộp bánh: số điểm và món luôn được kiểm tra lại ở server. */
+function createRedemption_(token, itemId, qty) {
+  var user = requireUser_(token);
+  var quantity = Number(qty);
+  if (!(quantity >= 1 && quantity <= 99 && Math.floor(quantity) === quantity)) {
+    throw new Error('Số hộp đổi không hợp lệ.');
+  }
+  var menu = getMenu_();
+  var item = menu.filter(function (m) { return String(m.itemId) === String(itemId || ''); })[0];
+  if (!item) throw new Error('Vị bánh này hiện không còn bán. Vui lòng tải lại trang.');
+  var pointsPerBox = Number(cfg_('FREE_BOX_POINTS')) || 0;
+  if (pointsPerBox <= 0) throw new Error('Cấu hình đổi điểm không hợp lệ.');
+  var spent = quantity * pointsPerBox;
+  var currentPoints = Number(user.obj.Points) || 0;
+  if (currentPoints < spent) throw new Error('Bạn không đủ điểm để đổi số hộp bánh này.');
+
+  var redemptions = table_('Redemptions');
+  var redemptionId = 'RD' + Utilities.formatDate(new Date(), tz_(), 'yyMMdd-HHmmss') + '-' +
+    Math.random().toString(36).slice(2, 5).toUpperCase();
+  var row = appendObject_(redemptions, {
+    RedemptionID: redemptionId, Phone: normPhone_(user.obj.Phone), CustomerName: String(user.obj.Name || ''),
+    ItemID: String(item.itemId), ItemName: String(item.name || ''), Quantity: quantity,
+    PointsSpent: spent, Status: 'Yêu cầu mới', CreatedAt: new Date()
+  });
+  var newPoints = currentPoints - spent;
+  try {
+    table_('Users').sheet.getRange(user.row, table_('Users').headers.indexOf('Points') + 1).setValue(newPoints);
+  } catch (err) {
+    redemptions.sheet.deleteRow(row);
+    throw err;
+  }
+  return { redemptionId: redemptionId, itemName: String(item.name || ''), quantity: quantity, pointsSpent: spent, points: newPoints };
+}
+
+function myRedemptions_(token) {
+  var user = requireUser_(token);
+  var phone = normPhone_(user.obj.Phone);
+  return table_('Redemptions').objects
+    .filter(function (r) { return safePhone_(r.obj.Phone) === phone; })
+    .map(function (r) {
+      return {
+        redemptionId: String(r.obj.RedemptionID || ''), itemName: String(r.obj.ItemName || ''),
+        quantity: Number(r.obj.Quantity) || 0, pointsSpent: Number(r.obj.PointsSpent) || 0,
+        status: String(r.obj.Status || ''), createdAt: fmtDate_(r.obj.CreatedAt)
+      };
+    })
+    .reverse();
+}
+
 // ===================== ADMIN (generic theo header) =====================
 function adminSheet_(name) {
   if (!Object.prototype.hasOwnProperty.call(SHEETS, name)) throw new Error('Bảng không hợp lệ: ' + name);
@@ -524,6 +576,7 @@ function adminListSheet_(token, sheet) {
 
 function adminAddRow_(token, sheet, data) {
   requireAdmin_(token);
+  if (sheet === 'Redemptions') throw new Error('Yêu cầu đổi điểm chỉ được tạo bởi khách hàng trên trang đổi điểm.');
   var t = adminSheet_(sheet);
   var obj = prepareAdminData_(t, sheet, data || {}, null);
   var row = appendObject_(t, obj);
@@ -535,6 +588,9 @@ function adminUpdateRow_(token, sheet, rowIndex, data, matchKey) {
   var t = adminSheet_(sheet);
   if (sheet === 'Orders' && ['PointsEarned', 'PointsCredited', 'PaymentMethod', 'PaymentStatus'].some(function (key) { return Object.prototype.hasOwnProperty.call(data || {}, key); })) {
     throw new Error('Dùng nút “Xác nhận TT & cộng điểm” để xác nhận thanh toán và cộng điểm.');
+  }
+  if (sheet === 'Redemptions' && Object.keys(data || {}).some(function (key) { return key !== 'Status'; })) {
+    throw new Error('Chỉ được cập nhật trạng thái yêu cầu đổi điểm.');
   }
   var row = checkRow_(t, rowIndex, matchKey);
   var current = rowToObj_(t.headers, t.rows[row - 2]);
@@ -549,6 +605,7 @@ function adminUpdateRow_(token, sheet, rowIndex, data, matchKey) {
 function adminDeleteRow_(token, sheet, rowIndex, matchKey) {
   var admin = requireAdmin_(token);
   var t = adminSheet_(sheet);
+  if (sheet === 'Redemptions') throw new Error('Không thể xoá yêu cầu đổi điểm để giữ lịch sử trừ điểm.');
   var row = checkRow_(t, rowIndex, matchKey);
   if (sheet === 'Users' && safePhone_(t.rows[row - 2][t.headers.indexOf('Phone')]) === normPhone_(admin.obj.Phone)) {
     throw new Error('Không thể tự xoá tài khoản admin đang đăng nhập.');

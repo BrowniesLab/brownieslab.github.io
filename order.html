@@ -37,6 +37,7 @@
     <section class="points" aria-live="polite">
       <span class="num" id="points">…</span>
       <span class="label">điểm thưởng</span>
+      <a class="linkbtn points-redeem" href="redeem.html">Đổi điểm</a>
       <ul class="rule" id="points-rule"></ul>
     </section>
 
@@ -277,7 +278,7 @@
         <dl class="receipt-summary">
           <div><dt>Số lượng bánh</dt><dd>${count} hộp</dd></div>
           <div><dt>Tổng số tiền</dt><dd>${formatVND(total)}</dd></div>
-          <div class="earn"><dt>Điểm chờ xác nhận thanh toán</dt><dd>+${pts}</dd></div>
+          <div class="earn"><dt>Điểm cộng</dt><dd>+${pts}</dd></div>
         </dl>` : '<p class="empty">Chưa chọn bánh nào.</p>';
 
       $('bar-total').textContent = formatVND(total);

@@ -154,7 +154,7 @@
         const total = lines.reduce((sum, l) => sum + l.price * l.qty, 0);
         const count = lines.reduce((sum, l) => sum + l.qty, 0);
         $('checkout-lines').className = '';
-        $('checkout-lines').innerHTML = `<ul class="checkout-items">${lines.map(l => `<li><span>${escapeHtml(l.name)} × ${l.qty}</span><strong>${formatVND(l.price * l.qty)}</strong></li>`).join('')}</ul><dl class="receipt-summary"><div><dt>Số lượng bánh</dt><dd>${count} hộp</dd></div><div><dt>Tổng số tiền</dt><dd>${formatVND(total)}</dd></div><div class="earn"><dt>Điểm chờ xác nhận thanh toán</dt><dd>+${estimatePoints(count)}</dd></div></dl>`;
+        $('checkout-lines').innerHTML = `<ul class="checkout-items">${lines.map(l => `<li><span>${escapeHtml(l.name)} × ${l.qty}</span><strong>${formatVND(l.price * l.qty)}</strong></li>`).join('')}</ul><dl class="receipt-summary"><div><dt>Số lượng bánh</dt><dd>${count} hộp</dd></div><div><dt>Tổng số tiền</dt><dd>${formatVND(total)}</dd></div><div class="earn"><dt>Điểm cộng</dt><dd>+${estimatePoints(count)}</dd></div></dl>`;
       } catch (err) { $('checkout-lines').className = 'empty'; $('checkout-lines').textContent = err.message; handleError(err); }
     }
 

@@ -79,6 +79,8 @@ const ACTIONS = {
   cancelOrder:        (b, ctx) => cancelOrder(b, ctx),
   myOrders:           (b, ctx) => myOrders(b, ctx),
   myPoints:           (b, ctx) => myPoints(b, ctx),
+  createRedemption:   (b, ctx) => createRedemption(b, ctx),
+  myRedemptions:      (b, ctx) => myRedemptions(b, ctx),
   paymentInfo:        (b, ctx) => paymentInfo(b, ctx),
   uploadPaymentProof: (b, ctx) => uploadPaymentProof(b, ctx),
   adminListSheet:     (b, ctx) => adminListSheet(b, ctx),
@@ -382,6 +384,45 @@ async function myPoints(b, ctx) {
   };
 }
 
+/** Đổi điểm lấy hộp bánh: không tin điểm, giá hay món từ trình duyệt. */
+async function createRedemption(b, ctx) {
+  const user = await requireUser(ctx.env, b.token);
+  const quantity = Number(b.qty);
+  if (!(quantity >= 1 && quantity <= 99 && Math.floor(quantity) === quantity)) throw new Error('Số hộp đổi không hợp lệ.');
+  const menu = await getMenu(ctx.env);
+  const item = menu.find(m => String(m.itemId) === String(b.itemId || ''));
+  if (!item) throw new Error('Vị bánh này hiện không còn bán. Vui lòng tải lại trang.');
+  const pointsPerBox = Number(cfg(ctx.env, 'FREE_BOX_POINTS')) || 0;
+  if (pointsPerBox <= 0) throw new Error('Cấu hình đổi điểm không hợp lệ.');
+  const spent = quantity * pointsPerBox;
+  const redemptionId = 'RD' + formatCompact(new Date()) + '-' + Math.random().toString(36).slice(2, 5).toUpperCase();
+  const createdAt = new Date().toISOString();
+
+  // Trừ điểm có điều kiện ngay trong database, nên hai lần bấm đồng thời không thể đổi quá số điểm có.
+  const deducted = await ctx.env.DB.prepare(
+    'UPDATE users SET points = points - ? WHERE phone = ? AND points >= ?'
+  ).bind(spent, user.phone, spent).run();
+  if (!deducted.meta || Number(deducted.meta.changes) !== 1) throw new Error('Bạn không đủ điểm để đổi số hộp bánh này.');
+  try {
+    await ctx.env.DB.prepare(
+      'INSERT INTO redemptions (redemption_id, phone, customer_name, item_id, item_name, quantity, points_spent, status, created_at) VALUES (?,?,?,?,?,?,?,?,?)'
+    ).bind(redemptionId, user.phone, user.name || '', item.itemId, item.name || '', quantity, spent, 'Yêu cầu mới', createdAt).run();
+  } catch (err) {
+    await ctx.env.DB.prepare('UPDATE users SET points = points + ? WHERE phone = ?').bind(spent, user.phone).run();
+    throw err;
+  }
+  return { redemptionId, itemName: item.name || '', quantity, pointsSpent: spent, points: (Number(user.points) || 0) - spent };
+}
+
+async function myRedemptions(b, ctx) {
+  const user = await requireUser(ctx.env, b.token);
+  const { results } = await ctx.env.DB.prepare('SELECT * FROM redemptions WHERE phone = ? ORDER BY id DESC').bind(user.phone).all();
+  return results.map(r => ({
+    redemptionId: r.redemption_id || '', itemName: r.item_name || '', quantity: Number(r.quantity) || 0,
+    pointsSpent: Number(r.points_spent) || 0, status: r.status || '', createdAt: fmtDate(r.created_at)
+  }));
+}
+
 async function paymentInfo(b, ctx) {
   const { order } = await requireCustomerOrder(ctx.env, b.token, b.orderId);
   return {
@@ -455,6 +496,12 @@ const SHEET_DEFS = {
       'delivery_address', 'pickup_date', 'pickup_time', 'payment_method', 'payment_status', 'payment_proof_url'
     ],
     bool: new Set(['PointsCredited']), num: new Set(['Total', 'PointsEarned']), date: new Set(['CreatedAt'])
+  },
+  Redemptions: {
+    table: 'redemptions',
+    headers: ['RedemptionID', 'Phone', 'CustomerName', 'ItemID', 'ItemName', 'Quantity', 'PointsSpent', 'Status', 'CreatedAt'],
+    columns: ['redemption_id', 'phone', 'customer_name', 'item_id', 'item_name', 'quantity', 'points_spent', 'status', 'created_at'],
+    bool: new Set(), num: new Set(['Quantity', 'PointsSpent']), date: new Set(['CreatedAt'])
   },
   Sessions: {
     table: 'sessions',
@@ -530,6 +577,7 @@ function coerceForStorage(header, value, def) {
 
 async function adminAddRow(b, ctx) {
   await requireAdmin(ctx.env, b.token);
+  if (b.sheet === 'Redemptions') throw new Error('Yêu cầu đổi điểm chỉ được tạo bởi khách hàng trên trang đổi điểm.');
   const def = sheetDef(b.sheet);
   const prepared = await prepareAdminData(def, b.data || {}, null, ctx.env, b.sheet);
   const cols = [], placeholders = [], vals = [];
@@ -551,6 +599,9 @@ async function adminUpdateRow(b, ctx) {
       throw new Error('Dùng nút "Xác nhận TT & cộng điểm" để xác nhận thanh toán và cộng điểm.');
     }
   }
+  if (b.sheet === 'Redemptions' && Object.keys(b.data || {}).some(k => k !== 'Status')) {
+    throw new Error('Chỉ được cập nhật trạng thái yêu cầu đổi điểm.');
+  }
   const row = await checkRow(ctx.env, def, b.rowIndex, b.matchKey);
   const currentHeaderObj = rowToHeaderObj(def, row);
   const prepared = await prepareAdminData(def, b.data || {}, currentHeaderObj, ctx.env, b.sheet);
@@ -570,6 +621,7 @@ async function adminUpdateRow(b, ctx) {
 async function adminDeleteRow(b, ctx) {
   const admin = await requireAdmin(ctx.env, b.token);
   const def = sheetDef(b.sheet);
+  if (b.sheet === 'Redemptions') throw new Error('Không thể xoá yêu cầu đổi điểm để giữ lịch sử trừ điểm.');
   const row = await checkRow(ctx.env, def, b.rowIndex, b.matchKey);
   if (b.sheet === 'Users' && String(row.phone) === String(admin.phone)) {
     throw new Error('Không thể tự xoá tài khoản admin đang đăng nhập.');

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#442009">
+  <title>Brownies Lab · Đổi điểm</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar"><div class="topbar-inner" style="max-width:48rem"><a class="brand" href="order.html"><img class="topbar-logo" src="metadata/Logo.png" alt=""><span>Brownies Lab<small>Đổi điểm thưởng</small></span></a><span class="spacer"></span><a class="linkbtn" href="order.html?tab=history">Đơn của tôi</a></div></header>
+  <main class="payment-wrap">
+    <section class="payment-card">
+      <p class="eyebrow">Điểm thưởng</p>
+      <h1>Đổi điểm lấy bánh</h1>
+      <p class="muted" id="redeem-balance">Đang tải điểm thưởng…</p>
+      <form id="redeem-form" hidden>
+        <label class="field"><span>Chọn vị bánh</span><select id="redeem-item" required></select></label>
+        <label class="field"><span>Số hộp muốn đổi</span><input id="redeem-qty" type="number" inputmode="numeric" min="1" step="1" required></label>
+        <div class="redeem-summary" id="redeem-summary"></div>
+        <button class="btn btn-primary btn-block" id="redeem-submit" type="submit">Gửi yêu cầu đổi điểm</button>
+      </form>
+      <p class="empty" id="redeem-empty" hidden></p>
+      <h2 style="margin-top:1.5rem">Yêu cầu đổi điểm của bạn</h2>
+      <ul class="redemption-list" id="redemption-list"><li class="loading" style="min-height:3rem"></li></ul>
+    </section>
+  </main>
+  <script src="app.js"></script>
+  <script>
+    const session = requireSession();
+    const $ = (id) => document.getElementById(id);
+    let points = 0, rule = { freeBoxPoints: 10 }, menu = [];
+
+    function formatSummary() {
+      const qty = Number($('redeem-qty').value) || 0;
+      const spent = qty * rule.freeBoxPoints;
+      $('redeem-summary').textContent = qty
+        ? `Bạn dùng ${spent} điểm để đổi ${qty} hộp bánh.`
+        : `Mỗi hộp bánh cần ${rule.freeBoxPoints} điểm.`;
+      $('redeem-submit').disabled = !(qty >= 1 && qty <= Math.floor(points / rule.freeBoxPoints));
+    }
+    function renderHistory(rows) {
+      $('redemption-list').innerHTML = rows.length ? rows.map((r) =>
+        `<li><div><strong>${escapeHtml(r.itemName)} × ${r.quantity}</strong><br><span>${escapeHtml(r.createdAt)} · ${escapeHtml(r.status)}</span></div><strong>−${r.pointsSpent}</strong></li>`
+      ).join('') : '<li class="empty">Bạn chưa có yêu cầu đổi điểm nào.</li>';
+    }
+    async function init() {
+      $('redeem-form').hidden = true;
+      $('redeem-empty').hidden = true;
+      try {
+        const [p, activeMenu, history] = await Promise.all([api('myPoints'), apiGet('getMenu'), api('myRedemptions')]);
+        points = Number(p.points) || 0; rule = { ...rule, ...(p.rule || {}) }; menu = activeMenu;
+        const maxQty = Math.floor(points / rule.freeBoxPoints);
+        $('redeem-balance').textContent = `Bạn hiện có ${points} điểm. Mỗi hộp đổi cần ${rule.freeBoxPoints} điểm.`;
+        renderHistory(history);
+        if (!menu.length || maxQty < 1) {
+          $('redeem-empty').hidden = false;
+          $('redeem-empty').textContent = menu.length ? `Bạn cần tối thiểu ${rule.freeBoxPoints} điểm để đổi bánh.` : 'Hiện chưa có vị bánh để đổi điểm.';
+          return;
+        }
+        $('redeem-item').innerHTML = menu.map((item) => `<option value="${escapeHtml(item.itemId)}">${escapeHtml(item.name)}</option>`).join('');
+        $('redeem-qty').max = String(maxQty); $('redeem-qty').value = '1';
+        $('redeem-form').hidden = false; formatSummary();
+      } catch (err) { $('redeem-empty').hidden = false; $('redeem-empty').textContent = err.message; handleError(err); }
+    }
+    $('redeem-qty').addEventListener('input', formatSummary);
+    $('redeem-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const qty = Number($('redeem-qty').value);
+      if (!(qty >= 1 && qty <= Math.floor(points / rule.freeBoxPoints) && Math.floor(qty) === qty)) return handleError(new Error('Số hộp đổi không hợp lệ.'));
+      try {
+        const result = await withBusy($('redeem-submit'), () => api('createRedemption', { itemId: $('redeem-item').value, qty }), 'Đang gửi yêu cầu…');
+        Session.update({ points: result.points });
+        toast(`Đã trừ ${result.pointsSpent} điểm và ghi nhận yêu cầu đổi bánh.`, 'success');
+        await init();
+      } catch (err) { handleError(err); }
+    });
+    if (session) init();
+  </script>
+</body>
+</html>
