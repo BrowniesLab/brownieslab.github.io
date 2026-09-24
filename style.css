@@ -350,7 +350,10 @@ a.social-link:hover { background: var(--pink); transform: translateY(-1px); }
   background: var(--paper); border: 1.5px solid var(--div);
   border-radius: var(--r-lg); padding: 1.25rem 1.1rem 1rem;
   margin-top: 1rem; box-shadow: var(--sh-sm);
+  /* Phiếu tự dài theo số loại bánh, không che phần tổng kết bên dưới. */
+  height: auto !important; min-height: 0; overflow: visible;
 }
+.receipt #cart-lines { height: auto !important; max-height: none; overflow: visible; }
 .receipt h2 { font-size: 1.15rem; margin-bottom: .85rem; }
 .receipt table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .9rem; }
 .receipt td { padding: .3rem 0; vertical-align: top; }
