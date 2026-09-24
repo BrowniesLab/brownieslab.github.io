@@ -77,8 +77,8 @@ SESSION_DAYS, MAX_LOGIN_FAILS, LOCK_MINUTES, NEW_ORDER_STATUS, PAYMENT_QR_URL) r
 | | Apps Script (`Code.gs`) | Worker (`worker/src/index.js`) |
 |---|---|---|
 | Database | Google Sheet | D1 (SQLite) |
-| Ảnh minh chứng thanh toán | Google Drive, base64 trong JSON | R2, **vẫn base64 trong JSON** (không đổi `payment.html`), phục vụ lại qua `GET /proof/<key>` |
+| Ảnh minh chứng thanh toán | Google Drive, base64 trong JSON | Lưu base64 thẳng trong D1 (không đổi `payment.html`), phục vụ lại qua `GET /proof/<orderId>` |
 | Khoá sai PIN nhiều lần | `CacheService` | bảng `login_attempts` |
 | Phiên đăng nhập | `CacheService`/tab `Sessions` | bảng `sessions` |
 | Sửa dữ liệu trực tiếp | Mở Google Sheet, sửa ô | Phải qua trang `/admin.html` hoặc lệnh `wrangler d1 execute` |
-| Chi phí | 0đ | 0đ trong hạn miễn phí D1/R2 (dư sức dùng nội bộ) |
+| Chi phí | 0đ | 0đ trong hạn miễn phí D1 (dư sức dùng nội bộ) |

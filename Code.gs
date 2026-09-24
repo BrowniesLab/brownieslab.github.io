@@ -106,11 +106,23 @@ function register_(phone, name, pin, socialLink) {
   if (findRow_(users, 'Phone', phone, normPhone_)) throw new Error('Số điện thoại này đã đăng ký. Hãy đăng nhập.');
 
   var signupBonus = Math.max(0, Number(cfg_('SIGNUP_BONUS')) || 0);
+
+  // Cộng dồn điểm từ các đơn cũ (đặt trước khi có tài khoản, vd qua Google Form) trùng SĐT này.
+  var orders = table_('Orders');
+  var legacy = orders.objects.filter(function (o) {
+    return safePhone_(o.obj.Phone) === phone && !isTrue_(o.obj.PointsCredited);
+  });
+  var legacyPoints = legacy.reduce(function (sum, o) { return sum + (Number(o.obj.PointsEarned) || 0); }, 0);
+  var points = signupBonus + legacyPoints;
+
   appendObject_(users, {
     Phone: phone, Name: name, PinHash: hashPin_(phone, pin),
-    Points: signupBonus, IsAdmin: false, CreatedAt: new Date(), SocialLink: socialLink
+    Points: points, IsAdmin: false, CreatedAt: new Date(), SocialLink: socialLink
   });
-  return createSession_({ Phone: phone, Name: name, Points: signupBonus, IsAdmin: false });
+  legacy.forEach(function (o) {
+    writeCell_(orders.sheet.getRange(o.row, orders.headers.indexOf('PointsCredited') + 1), 'PointsCredited', true);
+  });
+  return createSession_({ Phone: phone, Name: name, Points: points, IsAdmin: false });
 }
 
 function login_(phone, pin) {

@@ -115,11 +115,23 @@ async function register(b, ctx) {
   const pinHash = await hashPin(ctx.env, phone, b.pin);
   const createdAt = new Date().toISOString();
   const signupBonus = Math.max(0, Number(cfg(ctx.env, 'SIGNUP_BONUS')) || 0);
+
+  // Cộng dồn điểm từ các đơn cũ (đặt trước khi có tài khoản, vd qua Google Form) trùng SĐT này.
+  const { results: legacyOrders } = await ctx.env.DB.prepare(
+    'SELECT id, points_earned FROM orders WHERE phone = ? AND points_credited = 0'
+  ).bind(phone).all();
+  const legacyPoints = legacyOrders.reduce((sum, o) => sum + (Number(o.points_earned) || 0), 0);
+  const points = signupBonus + legacyPoints;
+
   await ctx.env.DB.prepare(
     'INSERT INTO users (phone, name, pin_hash, points, is_admin, created_at, social_link) VALUES (?,?,?,?,0,?,?)'
-  ).bind(phone, name, pinHash, signupBonus, createdAt, socialLink).run();
+  ).bind(phone, name, pinHash, points, createdAt, socialLink).run();
+  if (legacyOrders.length) {
+    const ids = legacyOrders.map(o => o.id);
+    await ctx.env.DB.prepare(`UPDATE orders SET points_credited = 1 WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).run();
+  }
 
-  return createSession(ctx.env, { phone, name, points: signupBonus, is_admin: 0 });
+  return createSession(ctx.env, { phone, name, points, is_admin: 0 });
 }
 
 async function login(b, ctx) {
