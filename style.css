@@ -261,6 +261,7 @@ a.social-link:hover { background: var(--pink); transform: translateY(-1px); }
 .auth-hero { margin-bottom: 1.75rem; }
 .auth-hero h1 { font-size: clamp(1.8rem,5vw,2.6rem); }
 .auth-hero p { margin: .5rem 0 0; color: var(--muted); }
+.auth-mobile-intro { display: none; }
 
 @media (max-width: 64rem) {
   .auth-split { flex-direction: column; }
@@ -268,15 +269,15 @@ a.social-link:hover { background: var(--pink); transform: translateY(-1px); }
     width: 100%; padding: 1.25rem 1.25rem 1.5rem;
     flex-direction: row; align-items: center; gap: 1rem;
   }
-  .auth-brand h1,.auth-brand p { display: none; }
+  .auth-brand h1,.auth-brand p,.auth-brand .social-row,.auth-brand .auth-bakes { display: none; }
   .auth-brand::after { display: none; }
-  .auth-hero-photo { width: 8rem; max-height: none; right: -.75rem; left: auto; bottom: -.75rem; transform: rotate(270deg); opacity: .55; }
   .auth-brand .brand { font-size: 1.25rem; }
   .brand-logo { width: 2.45rem; height: 2.45rem; }
-  .social-row { margin: 0 0 0 auto; flex-wrap: nowrap; gap: .35rem; }
-  .social-link { width: 2rem; height: 2rem; justify-content: center; padding: 0; }
-  .social-link span { display: none; }
-  .auth-form { padding: 2rem 1.25rem 5rem; }
+  .auth-mobile-intro { display: grid; justify-items: center; gap: .8rem; margin: 0 0 1.6rem; }
+  .auth-mobile-photo { display: block; width: min(100%, 20rem); max-height: 14rem; object-fit: cover; border-radius: var(--r-lg); box-shadow: var(--sh-md); }
+  .auth-mobile-social { display: flex; justify-content: center; gap: .55rem; flex-wrap: wrap; }
+  .auth-mobile-social .social-link { min-height: 2.25rem; }
+  .auth-form { padding: 1.5rem 1.25rem 5rem; justify-content: flex-start; }
   .auth-form h2 { font-size: 1.35rem; }
 }
 
