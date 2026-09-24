@@ -1,0 +1,30 @@
+name = "brownies-lab"
+main = "src/index.js"
+compatibility_date = "2026-09-24"
+
+# 1) wrangler d1 create brownies-lab-db
+#    -> dán database_id trả về vào đây.
+[[d1_databases]]
+binding = "DB"
+database_name = "brownies-lab-db"
+database_id = "PASTE_DATABASE_ID_HERE"
+
+# 2) wrangler r2 bucket create brownies-lab-proofs
+[[r2_buckets]]
+binding = "PROOFS"
+bucket_name = "brownies-lab-proofs"
+
+# Có thể sửa trực tiếp các giá trị dưới đây rồi `wrangler deploy` lại, không cần sửa code.
+# (Tương đương Script Properties của bản Apps Script cũ.)
+[vars]
+POINTS_PER_BOX = "1"
+FIRST_ORDER_BONUS = "2"
+FREE_BOX_POINTS = "10"
+SESSION_DAYS = "30"
+MAX_LOGIN_FAILS = "5"
+LOCK_MINUTES = "15"
+NEW_ORDER_STATUS = "Mới"
+PAYMENT_QR_URL = ""
+
+# Secret, KHÔNG đặt trong file này (không commit lên git):
+#   wrangler secret put PIN_SALT
