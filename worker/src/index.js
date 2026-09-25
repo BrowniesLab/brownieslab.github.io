@@ -85,6 +85,7 @@ const ACTIONS = {
   myRedemptions:      (b, ctx) => myRedemptions(b, ctx),
   paymentInfo:        (b, ctx) => paymentInfo(b, ctx),
   uploadPaymentProof: (b, ctx) => uploadPaymentProof(b, ctx),
+  adminCreateOrder:   (b, ctx) => adminCreateOrder(b, ctx),
   adminListSheet:     (b, ctx) => adminListSheet(b, ctx),
   adminConfirmPayment:(b, ctx) => adminConfirmPayment(b, ctx),
   adminAddRow:        (b, ctx) => adminAddRow(b, ctx),
@@ -374,6 +375,56 @@ async function createOrder(b, ctx) {
   ).run();
 
   return { orderId, total, pointsEarned: earned, points: Number(user.points) || 0, paymentMethod: checkout.paymentMethod };
+}
+
+/**
+ * Admin nhập tay đơn bị sót (vd khách nhắn tin đặt ngoài web). Dùng lại y hệt cách tính
+ * tiền/điểm của createOrder, chỉ khác là khách chỉ định bằng SĐT bất kỳ thay vì lấy từ
+ * session, và không set sẵn Status/PaymentStatus — đơn tạo ra luôn bắt đầu ở "Mới", đi qua
+ * đúng luồng Xác nhận thanh toán / Xác nhận đã giao như đơn khách tự đặt.
+ */
+async function adminCreateOrder(b, ctx) {
+  await requireAdmin(ctx.env, b.token);
+  const phone = normPhone(b.phone);
+  const customerName = String(b.customerName || '').trim();
+  if (!customerName) throw new Error('Vui lòng nhập tên khách.');
+  if (!Array.isArray(b.items) || !b.items.length) throw new Error('Chưa chọn món nào.');
+  const checkout = buildCheckout({ name: customerName }, phone, b.checkout || {});
+
+  const { results: menuRows } = await ctx.env.DB.prepare('SELECT * FROM menu WHERE active = 1').all();
+  const menu = {}; menuRows.forEach(m => { menu[m.item_id] = m; });
+
+  const lines = []; let total = 0; const seen = {};
+  for (const it of b.items) {
+    const id = String((it && it.itemId) || '');
+    const qty = Number(it && it.qty);
+    const m = menu[id];
+    if (!m) throw new Error('Món "' + id + '" không còn bán. Vui lòng tải lại menu.');
+    if (!(qty >= 1 && qty <= 99 && Math.floor(qty) === qty)) throw new Error('Số lượng không hợp lệ.');
+    if (seen[id]) throw new Error('Món bị lặp trong đơn.');
+    seen[id] = true;
+    lines.push({ itemId: id, name: m.name, price: Number(m.price) || 0, qty });
+    total += (Number(m.price) || 0) * qty;
+  }
+
+  const earned = pointsFor(ctx.env, lines);
+  const orderId = 'BL' + formatCompact(new Date()) + '-A' + Math.random().toString(36).slice(2, 5).toUpperCase();
+  const createdAt = new Date().toISOString();
+  const paymentStatus = checkout.paymentMethod === 'Thanh toán trước' ? 'Cần gửi minh chứng' : 'Chưa thanh toán';
+
+  await ctx.env.DB.prepare(
+    `INSERT INTO orders (
+       order_id, phone, customer_name, items_json, total, points_earned, points_credited, status, created_at, note,
+       recipient_name, recipient_phone, recipient_message, fulfillment_type, pickup_location, delivery_address,
+       pickup_date, pickup_time, payment_method, payment_status, payment_proof_url
+     ) VALUES (?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,'')`
+  ).bind(
+    orderId, phone, customerName, JSON.stringify(lines), total, earned, cfg(ctx.env, 'NEW_ORDER_STATUS'), createdAt, checkout.note,
+    checkout.recipientName, checkout.recipientPhone, checkout.recipientMessage, checkout.fulfillmentType, checkout.pickupLocation, checkout.deliveryAddress,
+    checkout.pickupDate, checkout.pickupTime, checkout.paymentMethod, paymentStatus
+  ).run();
+
+  return { orderId, total, pointsEarned: earned, paymentMethod: checkout.paymentMethod };
 }
 
 async function requireCustomerOrder(env, token, orderId) {

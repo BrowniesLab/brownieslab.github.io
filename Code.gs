@@ -76,6 +76,7 @@ var ACTIONS = {
   myRedemptions:  function (b) { return myRedemptions_(b.token); },
   paymentInfo:    function (b) { return paymentInfo_(b.token, b.orderId); },
   uploadPaymentProof: function (b) { return withLock_(function () { return uploadPaymentProof_(b.token, b.orderId, b.filename, b.mimeType, b.base64); }); },
+  adminCreateOrder: function (b) { return withLock_(function () { return adminCreateOrder_(b.token, b.phone, b.customerName, b.items, b.checkout || {}); }); },
   adminListSheet: function (b) { return adminListSheet_(b.token, b.sheet); },
   adminConfirmPayment: function (b) { return withLock_(function () { return adminConfirmPayment_(b.token, b.rowIndex, b.matchKey); }); },
   adminAddRow:    function (b) { return withLock_(function () { return adminAddRow_(b.token, b.sheet, b.data); }); },
@@ -353,6 +354,66 @@ function createOrder_(token, items, checkout) {
   onOrderCreated_(order, lines);
 
   return { orderId: orderId, total: total, pointsEarned: earned, points: Number(user.obj.Points) || 0, paymentMethod: checkoutData.PaymentMethod };
+}
+
+/**
+ * Admin nhập tay đơn bị sót (vd khách nhắn tin đặt ngoài web). Dùng lại y hệt cách tính
+ * tiền/điểm của createOrder_, chỉ khác là khách chỉ định bằng SĐT bất kỳ thay vì lấy từ
+ * session, và không set sẵn Status/PaymentStatus — đơn tạo ra luôn bắt đầu ở "Mới", đi qua
+ * đúng luồng Xác nhận thanh toán / Xác nhận đã giao như đơn khách tự đặt.
+ */
+function adminCreateOrder_(token, phone, customerName, items, checkout) {
+  requireAdmin_(token);
+  phone = normPhone_(phone);
+  customerName = String(customerName || '').trim();
+  if (!customerName) throw new Error('Vui lòng nhập tên khách.');
+  if (!Array.isArray(items) || !items.length) throw new Error('Chưa chọn món nào.');
+  var checkoutData = checkoutData_({ obj: { Name: customerName } }, phone, checkout);
+
+  var menu = {};
+  getMenu_().forEach(function (m) { menu[m.itemId] = m; });
+
+  var lines = [], total = 0, seen = {};
+  items.forEach(function (it) {
+    var id = String(it && it.itemId || '');
+    var qty = Number(it && it.qty);
+    if (!menu[id]) throw new Error('Món "' + id + '" không còn bán. Vui lòng tải lại menu.');
+    if (!(qty >= 1 && qty <= 99 && Math.floor(qty) === qty)) throw new Error('Số lượng không hợp lệ.');
+    if (seen[id]) throw new Error('Món bị lặp trong đơn.');
+    seen[id] = true;
+    lines.push({ itemId: id, name: menu[id].name, price: menu[id].price, qty: qty });
+    total += menu[id].price * qty;
+  });
+
+  var earned = pointsFor_(lines);
+  var orderId = 'BL' + Utilities.formatDate(new Date(), tz_(), 'yyMMdd-HHmmss') + '-A' +
+    Math.random().toString(36).slice(2, 5).toUpperCase();
+  var order = {
+    OrderID: orderId,
+    Phone: phone,
+    CustomerName: customerName,
+    ItemsJSON: JSON.stringify(lines),
+    Total: total,
+    PointsEarned: earned,
+    PointsCredited: false,
+    Status: cfg_('NEW_ORDER_STATUS'),
+    CreatedAt: new Date(),
+    Note: checkoutData.Note,
+    RecipientName: checkoutData.RecipientName,
+    RecipientPhone: checkoutData.RecipientPhone,
+    RecipientMessage: checkoutData.RecipientMessage,
+    FulfillmentType: checkoutData.FulfillmentType,
+    PickupLocation: checkoutData.PickupLocation,
+    DeliveryAddress: checkoutData.DeliveryAddress,
+    PickupDate: checkoutData.PickupDate,
+    PickupTime: checkoutData.PickupTime,
+    PaymentMethod: checkoutData.PaymentMethod,
+    PaymentStatus: checkoutData.PaymentMethod === 'Thanh toán trước' ? 'Cần gửi minh chứng' : 'Chưa thanh toán',
+    PaymentProofUrl: ''
+  };
+  appendObject_(table_('Orders'), order);
+  onOrderCreated_(order, lines);
+  return { orderId: orderId, total: total, pointsEarned: earned, paymentMethod: checkoutData.PaymentMethod };
 }
 
 /**

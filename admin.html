@@ -52,6 +52,46 @@
     </form>
   </dialog>
 
+  <dialog id="new-order">
+    <form method="dialog" id="new-order-form">
+      <h2>Nhập đơn thủ công</h2>
+      <p class="small muted">Dùng cho đơn bị sót (khách nhắn đặt ngoài web...). Đơn tạo ra sẽ bắt đầu ở trạng thái "Mới" và đi qua đúng luồng xử lý như đơn khách tự đặt — không đánh dấu sẵn đã thanh toán/đã giao ở đây.</p>
+
+      <label class="field"><span>Số điện thoại khách</span><input name="phone" type="tel" inputmode="tel" required placeholder="09xx xxx xxx"></label>
+      <label class="field"><span>Tên khách</span><input name="customerName" required placeholder="Nguyễn Văn A"></label>
+
+      <p style="font-weight:700;margin:.9rem 0 .4rem">Chọn món</p>
+      <div id="new-order-items"><p class="small muted">Đang tải menu…</p></div>
+
+      <p style="font-weight:700;margin:.9rem 0 .4rem">Cách nhận bánh</p>
+      <div class="choice-row" role="radiogroup" aria-label="Cách nhận bánh">
+        <label class="choice-card"><input type="radio" name="fulfillment" value="pickup" checked><span>Nhận tại NEU</span></label>
+        <label class="choice-card"><input type="radio" name="fulfillment" value="delivery"><span>Giao tận nơi</span></label>
+      </div>
+      <label class="field" id="new-order-pickup-field"><span>Toà nhà, phòng học/giảng đường</span><input name="pickupLocation" placeholder="Ví dụ: Toà A1, phòng 302"></label>
+      <label class="field" id="new-order-delivery-field" hidden><span>Địa chỉ giao bánh</span><input name="deliveryAddress" placeholder="Địa chỉ chi tiết"></label>
+
+      <div class="field-grid">
+        <label class="field"><span>Ngày nhận bánh</span><input name="pickupDate" placeholder="Ví dụ: 25/09 hoặc Thứ 6 (25/09)"></label>
+        <label class="field"><span>Thời gian nhận bánh</span><input name="pickupTime" placeholder="Ví dụ: Sáng (10–11h)"></label>
+      </div>
+
+      <p style="font-weight:700;margin:.9rem 0 .4rem">Thanh toán</p>
+      <div class="choice-row" role="radiogroup" aria-label="Phương thức thanh toán">
+        <label class="choice-card"><input type="radio" name="paymentMethod" value="cod" checked><span>Thanh toán khi nhận hàng</span></label>
+        <label class="choice-card"><input type="radio" name="paymentMethod" value="prepaid"><span>Thanh toán trước</span></label>
+      </div>
+
+      <label class="field"><span>Ghi chú <span class="muted" style="font-weight:400">(tuỳ chọn)</span></span><textarea name="note" rows="2"></textarea></label>
+
+      <div class="actions-row">
+        <span style="flex:1"></span>
+        <button class="btn btn-sm" type="button" id="new-order-cancel">Huỷ</button>
+        <button class="btn btn-primary btn-sm" type="submit" id="new-order-save">Tạo đơn</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="app.js"></script>
   <script>
     const SHEETS = ['Orders','Redemptions','Users','Menu','Sessions'];
@@ -106,13 +146,13 @@
 
     $('order-stage-tabs').innerHTML = ORDER_STAGES.map(s =>
       `<button class="tab" role="tab" data-stage="${s.key}" aria-selected="${s.key===orderStage}">${s.label}</button>`
-    ).join('');
+    ).join('') + `<button class="tab" role="tab" data-action="new-order" aria-selected="false">+ Nhập đơn</button>`;
     $('order-stage-tabs').addEventListener('click', (e) => {
+      const newOrderBtn = e.target.closest('[data-action=new-order]');
+      if (newOrderBtn) { openNewOrder(); return; }
       const b = e.target.closest('[data-stage]');
       if (!b) return;
       orderStage = b.dataset.stage;
-      document.querySelectorAll('#order-stage-tabs .tab').forEach(t =>
-        t.setAttribute('aria-selected', String(t === b)));
       render();
     });
     $('logout').addEventListener('click', logout);
@@ -206,6 +246,10 @@
     }
 
     function render() {
+      if (current === 'Orders') {
+        document.querySelectorAll('#order-stage-tabs [data-stage]').forEach(t =>
+          t.setAttribute('aria-selected', String(t.dataset.stage === orderStage)));
+      }
       let base = table.rows;
       if (current === 'Orders') base = base.filter(r => computeOrderStage(r) === orderStage);
       const q = $('search').value.trim().toLowerCase();
@@ -324,6 +368,82 @@
           sheet: current, rowIndex: editing.rowIndex, matchKey: cellText(editing.values[0])
         }), 'Đang xoá…');
         $('editor').close(); toast('Đã xoá.', 'success'); load();
+      } catch (err) { handleError(err); }
+    });
+
+    // ===================== Nhập đơn thủ công =====================
+    let newOrderMenu = null;
+    const newOrderQty = new Map();
+
+    async function openNewOrder() {
+      $('new-order-form').reset();
+      newOrderQty.clear();
+      $('new-order-pickup-field').hidden = false;
+      $('new-order-delivery-field').hidden = true;
+      $('new-order').showModal();
+      if (!newOrderMenu) {
+        try { newOrderMenu = await apiGet('getMenu'); }
+        catch (err) { $('new-order-items').innerHTML = '<p class="empty">Không tải được menu.</p>'; handleError(err); return; }
+      }
+      renderNewOrderItems();
+    }
+
+    function renderNewOrderItems() {
+      if (!newOrderMenu || !newOrderMenu.length) {
+        $('new-order-items').innerHTML = '<p class="empty">Chưa có món nào đang bán.</p>';
+        return;
+      }
+      $('new-order-items').innerHTML = newOrderMenu.map(m => `
+        <div class="order-ref-top" style="padding:.4rem 0" data-id="${escapeHtml(m.itemId)}">
+          <span>${escapeHtml(m.name)} <span class="muted">(${formatVND(m.price)})</span></span>
+          <span class="stepper">
+            <button type="button" data-act="dec" aria-label="Bớt ${escapeHtml(m.name)}">−</button>
+            <output aria-live="polite">0</output>
+            <button type="button" data-act="inc" aria-label="Thêm ${escapeHtml(m.name)}">+</button>
+          </span>
+        </div>`).join('');
+    }
+
+    $('new-order-items').addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-act]');
+      if (!btn) return;
+      const id = btn.closest('[data-id]').dataset.id;
+      const qty = (newOrderQty.get(id) || 0) + (btn.dataset.act === 'inc' ? 1 : -1);
+      if (qty <= 0) newOrderQty.delete(id); else newOrderQty.set(id, Math.min(qty, 99));
+      btn.closest('.stepper').querySelector('output').textContent = newOrderQty.get(id) || 0;
+    });
+
+    document.querySelectorAll('#new-order [name=fulfillment]').forEach(el => el.addEventListener('change', () => {
+      const isDelivery = $('new-order-form').elements.fulfillment.value === 'delivery';
+      $('new-order-pickup-field').hidden = isDelivery;
+      $('new-order-delivery-field').hidden = !isDelivery;
+    }));
+
+    $('new-order-cancel').addEventListener('click', () => $('new-order').close());
+
+    $('new-order-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      const items = [...newOrderQty].map(([itemId, qty]) => ({ itemId, qty }));
+      if (!items.length) { handleError(new Error('Chọn ít nhất 1 món.')); return; }
+      try {
+        const r = await withBusy($('new-order-save'), () => api('adminCreateOrder', {
+          phone: f.phone.value.trim(),
+          customerName: f.customerName.value.trim(),
+          items,
+          checkout: {
+            fulfillmentType: f.fulfillment.value,
+            pickupLocation: f.pickupLocation.value.trim(),
+            deliveryAddress: f.deliveryAddress.value.trim(),
+            pickupDate: f.pickupDate.value.trim(),
+            pickupTime: f.pickupTime.value.trim(),
+            paymentMethod: f.paymentMethod.value,
+            note: f.note.value.trim()
+          }
+        }), 'Đang tạo…');
+        $('new-order').close();
+        toast(`Đã tạo đơn ${r.orderId} · ${formatVND(r.total)}.`, 'success');
+        if (current === 'Orders') { orderStage = r.paymentMethod === 'Thanh toán trước' ? 'xac_nhan_tt' : 'chua_giao'; load(); }
       } catch (err) { handleError(err); }
     });
   </script>
