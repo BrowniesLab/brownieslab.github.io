@@ -16,6 +16,15 @@ CREATE TABLE IF NOT EXISTS users (
 );
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 
+-- Nhật ký thưởng tạo tài khoản. Mỗi SĐT chỉ có một dòng nên không thể nhận
+-- thưởng đăng ký hai lần, kể cả khi chạy lại migration.
+CREATE TABLE IF NOT EXISTS signup_bonus_credits (
+  phone TEXT PRIMARY KEY,
+  points INTEGER NOT NULL,
+  credited_at TEXT NOT NULL,
+  applied INTEGER NOT NULL DEFAULT 1
+);
+
 CREATE TABLE IF NOT EXISTS menu (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   item_id TEXT NOT NULL UNIQUE,

@@ -134,9 +134,16 @@ async function register(b, ctx) {
   const legacyPoints = legacyOrders.reduce((sum, o) => sum + (Number(o.points_earned) || 0), 0);
   const points = signupBonus + legacyPoints;
 
-  await ctx.env.DB.prepare(
-    'INSERT INTO users (phone, name, pin_hash, points, is_admin, created_at, social_link, claim_used) VALUES (?,?,?,?,0,?,?,1)'
-  ).bind(phone, name, pinHash, points, createdAt, socialLink).run();
+  // Ghi user và nhật ký quà đăng ký trong cùng một transaction. Nhật ký có
+  // phone là khoá chính, bảo đảm không thể cộng quà đăng ký hai lần.
+  await ctx.env.DB.batch([
+    ctx.env.DB.prepare(
+      'INSERT INTO users (phone, name, pin_hash, points, is_admin, created_at, social_link, claim_used) VALUES (?,?,?,?,0,?,?,1)'
+    ).bind(phone, name, pinHash, points, createdAt, socialLink),
+    ctx.env.DB.prepare(
+      'INSERT INTO signup_bonus_credits (phone, points, credited_at, applied) VALUES (?,?,?,1)'
+    ).bind(phone, signupBonus, createdAt)
+  ]);
   if (legacyOrders.length) {
     const ids = legacyOrders.map(o => o.id);
     await ctx.env.DB.prepare(`UPDATE orders SET points_credited = 1 WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).run();
