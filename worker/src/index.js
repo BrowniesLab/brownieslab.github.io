@@ -82,6 +82,7 @@ const ACTIONS = {
   cancelOrder:        (b, ctx) => cancelOrder(b, ctx),
   myOrders:           (b, ctx) => myOrders(b, ctx),
   pickupAvailability: (b, ctx) => pickupAvailability(b, ctx),
+  adminPickupCapacity: (b, ctx) => adminPickupCapacity(b, ctx),
   myPoints:           (b, ctx) => myPoints(b, ctx),
   createRedemption:   (b, ctx) => createRedemption(b, ctx),
   myRedemptions:      (b, ctx) => myRedemptions(b, ctx),
@@ -378,6 +379,23 @@ async function pickupAvailability(b, ctx) {
   return { maxBoxes: MAX_BOXES_PER_BATCH, dates };
 }
 
+
+/** Số hộp đang được khách đặt web giữ cho một ngày; chỉ admin mới xem được. */
+async function adminPickupCapacity(b, ctx) {
+  await requireAdmin(ctx.env, b.token);
+  const pickupDate = String(b.pickupDate || '').trim();
+  if (!pickupDate) throw new Error('Vui lòng nhập ngày nhận bánh.');
+  const row = await ctx.env.DB.prepare(
+    'SELECT boxes_reserved FROM pickup_batches WHERE pickup_date = ?'
+  ).bind(pickupDate).first();
+  const reserved = Math.min(MAX_BOXES_PER_BATCH, Math.max(0, Number(row && row.boxes_reserved) || 0));
+  return {
+    pickupDate,
+    reserved,
+    remaining: MAX_BOXES_PER_BATCH - reserved,
+    maxBoxes: MAX_BOXES_PER_BATCH
+  };
+}
 async function reservePickupBoxes(env, pickupDate, boxes) {
   const res = await env.DB.prepare(
     `INSERT INTO pickup_batches (pickup_date, boxes_reserved) VALUES (?, ?)

@@ -72,9 +72,10 @@
       <label class="field" id="new-order-delivery-field" hidden><span>Địa chỉ giao bánh</span><input name="deliveryAddress" placeholder="Địa chỉ chi tiết"></label>
 
       <div class="field-grid">
-        <label class="field"><span>Ngày nhận bánh</span><input name="pickupDate" placeholder="Ví dụ: 25/09 hoặc Thứ 6 (25/09)"></label>
+        <label class="field"><span>Ngày nhận bánh</span><input name="pickupDate" placeholder="Ví dụ: Thứ 6 (25/09)"></label>
         <label class="field"><span>Thời gian nhận bánh</span><input name="pickupTime" placeholder="Ví dụ: Sáng (10–11h)"></label>
       </div>
+      <p class="small muted" id="new-order-capacity" aria-live="polite">Nhập ngày nhận bánh để xem số hộp còn lại.</p>
 
       <p style="font-weight:700;margin:.9rem 0 .4rem">Thanh toán</p>
       <div class="choice-row" role="radiogroup" aria-label="Phương thức thanh toán">
@@ -381,6 +382,7 @@
       $('new-order-pickup-field').hidden = false;
       $('new-order-delivery-field').hidden = true;
       $('new-order').showModal();
+      $('new-order-capacity').textContent = 'Nhập ngày nhận bánh để xem số hộp còn lại.';
       if (!newOrderMenu) {
         try { newOrderMenu = await apiGet('getMenu'); }
         catch (err) { $('new-order-items').innerHTML = '<p class="empty">Không tải được menu.</p>'; handleError(err); return; }
@@ -418,6 +420,27 @@
       if (qty <= 0) newOrderQty.delete(id); else newOrderQty.set(id, Math.min(qty, 99));
       btn.closest('.stepper').querySelector('output').textContent = newOrderQty.get(id) || 0;
     });
+
+    async function showNewOrderCapacity() {
+      const pickupDate = $('new-order-form').elements.pickupDate.value.trim();
+      const output = $('new-order-capacity');
+      if (!pickupDate) {
+        output.textContent = 'Nhập ngày nhận bánh để xem số hộp còn lại.';
+        return;
+      }
+      output.textContent = 'Đang kiểm tra số hộp còn lại…';
+      try {
+        const capacity = await api('adminPickupCapacity', { pickupDate });
+        if ($('new-order-form').elements.pickupDate.value.trim() !== pickupDate) return;
+        output.textContent = `Đơn web đang giữ ${capacity.reserved}/${capacity.maxBoxes} hộp · còn ${capacity.remaining}/${capacity.maxBoxes} hộp. Đơn nhập tay không tự trừ suất.`;
+      } catch (err) {
+        if ($('new-order-form').elements.pickupDate.value.trim() === pickupDate) {
+          output.textContent = 'Chưa kiểm tra được sức chứa của ngày này.';
+        }
+      }
+    }
+
+    $('new-order-form').elements.pickupDate.addEventListener('change', showNewOrderCapacity);
 
     document.querySelectorAll('#new-order [name=fulfillment]').forEach(el => el.addEventListener('change', () => {
       const isDelivery = $('new-order-form').elements.fulfillment.value === 'delivery';
