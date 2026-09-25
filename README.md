@@ -10,8 +10,9 @@ Web nội bộ để khách đặt brownie theo đợt và tích điểm, thay c
 ```
 worker/      backend Cloudflare Worker + schema D1
 Code.gs      backend Apps Script cũ, dùng khi chưa chuyển sang Cloudflare
-index.html   đăng nhập / đăng ký
-order.html   đặt bánh, điểm thưởng, lịch sử đơn
+index.html   chuyển hướng ngay tới order.html (trang mặc định)
+order.html   đặt bánh, điểm thưởng, lịch sử đơn — khách chưa đăng nhập vẫn xem được menu
+login.html   đăng nhập / đăng ký
 checkout.html nhập thông tin người nhận, giao/nhận và thời gian nhận bánh
 payment.html QR thanh toán và tải ảnh chuyển khoản
 admin.html   xem / sửa / thêm / xoá trên 4 bảng (tự sinh theo header)

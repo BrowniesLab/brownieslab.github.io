@@ -17,7 +17,7 @@
       <span class="spacer"></span>
       <a class="linkbtn" id="admin-link" href="admin.html" hidden>Quản trị</a>
       <button class="linkbtn" id="logout" type="button" hidden>Đăng xuất</button>
-      <a class="linkbtn" id="login-link" href="index.html" hidden>Đăng nhập / Đăng ký</a>
+      <a class="linkbtn" id="login-link" href="login.html" hidden>Đăng nhập / Đăng ký</a>
     </div>
   </header>
 
@@ -43,7 +43,7 @@
     </section>
     <section class="points" id="guest-points-cta" hidden>
       <span class="label">Đăng nhập để xem điểm thưởng và lịch sử đơn của bạn.</span>
-      <a class="linkbtn" href="index.html">Đăng nhập / Đăng ký</a>
+      <a class="linkbtn" href="login.html">Đăng nhập / Đăng ký</a>
     </section>
 
     <!-- Tabs -->
@@ -308,7 +308,7 @@
       if (!session) {
         // Chưa đăng nhập: giữ giỏ hàng, đưa qua đăng nhập/đăng ký rồi quay lại đây với giỏ hàng cũ.
         toast('Đăng nhập hoặc tạo tài khoản để đặt bánh nhé.', 'info');
-        location.assign('index.html?next=' + encodeURIComponent('order.html?edit=1'));
+        location.assign('login.html?next=' + encodeURIComponent('order.html?edit=1'));
         return;
       }
       location.assign('checkout.html');
@@ -317,7 +317,7 @@
     function showTab(which) {
       if (which === 'history' && !session) {
         toast('Đăng nhập để xem đơn của bạn.', 'info');
-        location.assign('index.html?next=' + encodeURIComponent('order.html?tab=history'));
+        location.assign('login.html?next=' + encodeURIComponent('order.html?tab=history'));
         return;
       }
       const isMenu = which === 'menu';

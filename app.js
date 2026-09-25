@@ -77,7 +77,7 @@ async function apiGet(action) {
 function requireSession({ admin = false } = {}) {
   const s = Session.get();
   if (!s || (admin && !s.isAdmin)) {
-    location.replace('index.html');
+    location.replace('login.html');
     return null;
   }
   return s;
@@ -87,7 +87,7 @@ function requireSession({ admin = false } = {}) {
 function handleError(err) {
   if (err && err.isAuth) {
     toast(err.message, 'error');
-    setTimeout(() => location.replace('index.html'), 1200);
+    setTimeout(() => location.replace('login.html'), 1200);
     return;
   }
   toast(err && err.message ? err.message : String(err), 'error');
@@ -97,7 +97,7 @@ async function logout() {
   const s = Session.get();
   Session.clear();
   if (s) { try { await api('logout', { token: s.token }); } catch (e) { /* bỏ qua */ } }
-  location.replace('index.html');
+  location.replace('order.html');
 }
 
 // ---------- tiện ích giao diện ----------
