@@ -19,6 +19,7 @@
 
   <main>
     <div class="tabs" role="tablist" id="sheet-tabs"></div>
+    <div class="tabs" role="tablist" id="order-stage-tabs" hidden></div>
 
     <div class="toolbar">
       <label class="field">
@@ -62,6 +63,33 @@
     let table   = { headers: [], rows: [] };
     let editing = null;
 
+    // Pipeline đơn hàng: Thanh toán trước → xác nhận thanh toán → chưa giao → đơn hàng.
+    //                     Thanh toán khi nhận hàng → chưa giao → xác nhận thanh toán → đơn hàng.
+    // Đơn huỷ (ở bất kỳ bước nào) luôn rơi vào tab riêng.
+    const ORDER_STAGES = [
+      { key: 'xac_nhan_tt', label: 'Xác nhận thanh toán' },
+      { key: 'chua_giao',   label: 'Chưa giao' },
+      { key: 'don_hang',    label: 'Đơn hàng' },
+      { key: 'huy',         label: 'Đã huỷ' }
+    ];
+    let orderStage = ORDER_STAGES[0].key;
+
+    function isCancelledText(s) { return /huỷ|hủy|cancel/i.test(s || ''); }
+    function isPaidText(s) { return /đã thanh toán|paid/i.test(s || ''); }
+    function isDeliveredText(s) { return /đã giao|hoàn thành|done/i.test(s || ''); }
+
+    function computeOrderStage(row) {
+      const status = orderValue(row, 'Status');
+      const paymentStatus = orderValue(row, 'PaymentStatus');
+      const method = orderValue(row, 'PaymentMethod');
+      if (isCancelledText(status) || isCancelledText(paymentStatus)) return 'huy';
+      const paid = isPaidText(paymentStatus);
+      if (method === 'Thanh toán trước' && !paid) return 'xac_nhan_tt';
+      if (!isDeliveredText(status)) return 'chua_giao';
+      if (!paid) return 'xac_nhan_tt';
+      return 'don_hang';
+    }
+
     $('sheet-tabs').innerHTML = SHEETS.map(s =>
       `<button class="tab" role="tab" data-sheet="${s}" aria-selected="${s===current}">${LABELS[s]}</button>`
     ).join('');
@@ -72,7 +100,20 @@
       document.querySelectorAll('#sheet-tabs .tab').forEach(t =>
         t.setAttribute('aria-selected', String(t === b)));
       $('search').value = '';
+      orderStage = ORDER_STAGES[0].key;
       load();
+    });
+
+    $('order-stage-tabs').innerHTML = ORDER_STAGES.map(s =>
+      `<button class="tab" role="tab" data-stage="${s.key}" aria-selected="${s.key===orderStage}">${s.label}</button>`
+    ).join('');
+    $('order-stage-tabs').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-stage]');
+      if (!b) return;
+      orderStage = b.dataset.stage;
+      document.querySelectorAll('#order-stage-tabs .tab').forEach(t =>
+        t.setAttribute('aria-selected', String(t === b)));
+      render();
     });
     $('logout').addEventListener('click', logout);
     $('reload').addEventListener('click', load);
@@ -83,7 +124,8 @@
     if (session) load();
 
     async function load() {
-      $('add').hidden = current === 'Redemptions';
+      $('add').hidden = current === 'Redemptions' || current === 'Orders';
+      $('order-stage-tabs').hidden = current !== 'Orders';
       $('grid').innerHTML = '<tbody><tr><td class="loading" style="height:3rem"></td></tr></tbody>';
       try {
         table = await api('adminListSheet', { sheet: current });
@@ -157,17 +199,19 @@
             <span class="order-ref-items">${escapeHtml(orderItemsText(r))}</span>
             <span class="order-ref-total">${formatVND(orderValue(r, 'Total'))} · ${/^true$/i.test(orderValue(r, 'PointsCredited')) ? 'Đã cộng' : 'Chờ cộng'} +${escapeHtml(orderValue(r, 'PointsEarned'))} điểm</span>
           </button>
-          <span class="order-ref-actions"><span class="status payment">${escapeHtml(orderValue(r, 'PaymentMethod') || 'Chưa chọn')} · ${escapeHtml(orderValue(r, 'PaymentStatus') || 'Chưa thanh toán')}</span>${proof ? `<a class="btn btn-sm" href="${escapeHtml(proof)}" target="_blank" rel="noopener noreferrer">Xem ảnh</a>` : ''}${needsPaymentConfirmation(r) ? `<button class="btn btn-sm btn-dark" type="button" data-confirm-payment="${r.rowIndex}">Xác nhận TT &amp; cộng điểm</button>` : ''}</span>
+          <span class="order-ref-actions"><span class="status payment">${escapeHtml(orderValue(r, 'PaymentMethod') || 'Chưa chọn')} · ${escapeHtml(orderValue(r, 'PaymentStatus') || 'Chưa thanh toán')}</span>${proof ? `<a class="btn btn-sm" href="${escapeHtml(proof)}" target="_blank" rel="noopener noreferrer">Xem ảnh</a>` : ''}${orderStage === 'xac_nhan_tt' && needsPaymentConfirmation(r) ? `<button class="btn btn-sm btn-dark" type="button" data-confirm-payment="${r.rowIndex}">Xác nhận TT &amp; cộng điểm</button>` : ''}${orderStage === 'chua_giao' ? `<button class="btn btn-sm btn-dark" type="button" data-mark-delivered="${r.rowIndex}">Xác nhận đã giao</button>` : ''}</span>
         </td></tr>`;
-      }).join('') : '<tr><td class="empty" colspan="2">Không có đơn nào.</td></tr>';
+      }).join('') : `<tr><td class="empty" colspan="2">Không có đơn nào trong mục "${escapeHtml((ORDER_STAGES.find(s => s.key === orderStage) || {}).label || '')}".</td></tr>`;
       $('grid').innerHTML = '<tbody>' + body + '</tbody>';
     }
 
     function render() {
-      $('add').hidden = current === 'Orders';
+      let base = table.rows;
+      if (current === 'Orders') base = base.filter(r => computeOrderStage(r) === orderStage);
       const q = $('search').value.trim().toLowerCase();
-      const rows = q ? table.rows.filter(r => r.values.some(v => cellText(v).toLowerCase().includes(q))) : table.rows;
-      $('meta').textContent = `${LABELS[current]} · ${rows.length}/${table.rows.length} dòng · bấm vào một dòng để sửa`;
+      const rows = q ? base.filter(r => r.values.some(v => cellText(v).toLowerCase().includes(q))) : base;
+      const stageLabel = current === 'Orders' ? (ORDER_STAGES.find(s => s.key === orderStage) || {}).label + ' · ' : '';
+      $('meta').textContent = `${LABELS[current]} · ${stageLabel}${rows.length}/${base.length} dòng · bấm vào một dòng để sửa`;
       if (current === 'Orders') { renderOrderRefs(rows); return; }
       const head = `<thead><tr><th>#</th>${table.headers.map(h => `<th>${escapeHtml(h||'(trống)')}</th>`).join('')}<th></th></tr></thead>`;
       const body = rows.length
@@ -185,6 +229,8 @@
       if (e.target.closest('a')) return;
       const confirmPayment = e.target.closest('[data-confirm-payment]');
       if (confirmPayment) { confirmPaymentForRow(Number(confirmPayment.dataset.confirmPayment), confirmPayment); return; }
+      const markDelivered = e.target.closest('[data-mark-delivered]');
+      if (markDelivered) { markDeliveredForRow(Number(markDelivered.dataset.markDelivered), markDelivered); return; }
       const tr = e.target.closest('tr[data-row]');
       if (!tr) return;
       openEditor(table.rows.find(r => r.rowIndex === Number(tr.dataset.row)));
@@ -193,6 +239,8 @@
     $('editor-fields').addEventListener('click', (e) => {
       const confirmPayment = e.target.closest('[data-confirm-payment]');
       if (confirmPayment) confirmPaymentForRow(Number(confirmPayment.dataset.confirmPayment), confirmPayment);
+      const markDelivered = e.target.closest('[data-mark-delivered]');
+      if (markDelivered) markDeliveredForRow(Number(markDelivered.dataset.markDelivered), markDelivered);
     });
 
     async function confirmPaymentForRow(rowIndex, button) {
@@ -203,7 +251,20 @@
         const r = await withBusy(button, () => api('adminConfirmPayment', {
           rowIndex, matchKey: cellText(row.values[0])
         }), 'Đang xác nhận…');
-        toast(r.credited ? `Đã xác nhận thanh toán và cộng +${points} điểm.` : 'Đơn này đã được cộng điểm trước đó.', 'success'); load();
+        toast(r.credited ? `Đã xác nhận thanh toán và cộng +${points} điểm.` : 'Đơn này đã được cộng điểm trước đó.', 'success');
+        $('editor').close(); load();
+      } catch (err) { handleError(err); }
+    }
+
+    async function markDeliveredForRow(rowIndex, button) {
+      const row = table.rows.find(r => r.rowIndex === rowIndex);
+      if (!row || !confirm('Xác nhận đã giao đơn này cho khách?')) return;
+      try {
+        await withBusy(button, () => api('adminUpdateRow', {
+          sheet: 'Orders', rowIndex, data: { Status: 'Đã giao' }, matchKey: cellText(row.values[0])
+        }), 'Đang cập nhật…');
+        toast('Đã đánh dấu giao hàng — đơn chuyển sang tab phù hợp.', 'success');
+        $('editor').close(); load();
       } catch (err) { handleError(err); }
     }
 
@@ -213,7 +274,7 @@
         ? (current === 'Orders' ? `Chi tiết đơn · ${orderValue(row, 'CustomerName') || 'Khách hàng'}` : `Sửa dòng ${row.rowIndex} · ${LABELS[current]}`)
         : `Thêm dòng · ${LABELS[current]}`;
       $('editor-delete').hidden = !row || current === 'Redemptions';
-      const orderDetail = current === 'Orders' && row ? `<div class="order-detail"><p><strong>Khách đặt:</strong> ${escapeHtml(orderValue(row, 'CustomerName'))} · ${escapeHtml(orderValue(row, 'Phone'))}</p><p><strong>Người nhận:</strong> ${escapeHtml(orderValue(row, 'RecipientName'))} · ${escapeHtml(orderValue(row, 'RecipientPhone'))}</p><p><strong>Đơn bánh:</strong> ${escapeHtml(orderItemsText(row))} · <strong>${formatVND(orderValue(row, 'Total'))}</strong></p><p><strong>Nhận hàng:</strong> ${escapeHtml(orderValue(row, 'FulfillmentType'))} · ${escapeHtml(orderValue(row, 'PickupDate'))} · ${escapeHtml(orderValue(row, 'PickupTime'))}</p>${orderValue(row, 'PickupLocation') ? `<p><strong>Điểm nhận:</strong> ${escapeHtml(orderValue(row, 'PickupLocation'))}</p>` : ''}${orderValue(row, 'DeliveryAddress') ? `<p><strong>Địa chỉ giao:</strong> ${escapeHtml(orderValue(row, 'DeliveryAddress'))}</p>` : ''}${orderValue(row, 'RecipientMessage') ? `<p><strong>Lời nhắn người nhận:</strong> ${escapeHtml(orderValue(row, 'RecipientMessage'))}</p>` : ''}${orderValue(row, 'Note') ? `<p><strong>Ghi chú đơn:</strong> ${escapeHtml(orderValue(row, 'Note'))}</p>` : ''}<p><strong>Thanh toán:</strong> ${escapeHtml(orderValue(row, 'PaymentMethod'))} · ${escapeHtml(orderValue(row, 'PaymentStatus'))} · ${/^true$/i.test(orderValue(row, 'PointsCredited')) ? 'Đã cộng điểm' : 'Chưa cộng điểm'}</p>${orderValue(row, 'PaymentProofUrl') ? `<p><a class="grid-link" href="${escapeHtml(orderValue(row, 'PaymentProofUrl'))}" target="_blank" rel="noopener noreferrer">Xem ảnh chuyển khoản</a></p>` : ''}${needsPaymentConfirmation(row) ? `<button class="btn btn-primary btn-sm" type="button" data-confirm-payment="${row.rowIndex}">Xác nhận thanh toán &amp; cộng điểm</button>` : ''}</div>` : '';
+      const orderDetail = current === 'Orders' && row ? `<div class="order-detail"><p><strong>Khách đặt:</strong> ${escapeHtml(orderValue(row, 'CustomerName'))} · ${escapeHtml(orderValue(row, 'Phone'))}</p><p><strong>Người nhận:</strong> ${escapeHtml(orderValue(row, 'RecipientName'))} · ${escapeHtml(orderValue(row, 'RecipientPhone'))}</p><p><strong>Đơn bánh:</strong> ${escapeHtml(orderItemsText(row))} · <strong>${formatVND(orderValue(row, 'Total'))}</strong></p><p><strong>Nhận hàng:</strong> ${escapeHtml(orderValue(row, 'FulfillmentType'))} · ${escapeHtml(orderValue(row, 'PickupDate'))} · ${escapeHtml(orderValue(row, 'PickupTime'))}</p>${orderValue(row, 'PickupLocation') ? `<p><strong>Điểm nhận:</strong> ${escapeHtml(orderValue(row, 'PickupLocation'))}</p>` : ''}${orderValue(row, 'DeliveryAddress') ? `<p><strong>Địa chỉ giao:</strong> ${escapeHtml(orderValue(row, 'DeliveryAddress'))}</p>` : ''}${orderValue(row, 'RecipientMessage') ? `<p><strong>Lời nhắn người nhận:</strong> ${escapeHtml(orderValue(row, 'RecipientMessage'))}</p>` : ''}${orderValue(row, 'Note') ? `<p><strong>Ghi chú đơn:</strong> ${escapeHtml(orderValue(row, 'Note'))}</p>` : ''}<p><strong>Thanh toán:</strong> ${escapeHtml(orderValue(row, 'PaymentMethod'))} · ${escapeHtml(orderValue(row, 'PaymentStatus'))} · ${/^true$/i.test(orderValue(row, 'PointsCredited')) ? 'Đã cộng điểm' : 'Chưa cộng điểm'}</p>${orderValue(row, 'PaymentProofUrl') ? `<p><a class="grid-link" href="${escapeHtml(orderValue(row, 'PaymentProofUrl'))}" target="_blank" rel="noopener noreferrer">Xem ảnh chuyển khoản</a></p>` : ''}${needsPaymentConfirmation(row) ? `<button class="btn btn-primary btn-sm" type="button" data-confirm-payment="${row.rowIndex}">Xác nhận thanh toán &amp; cộng điểm</button>` : ''}${computeOrderStage(row) === 'chua_giao' ? `<button class="btn btn-primary btn-sm" type="button" data-mark-delivered="${row.rowIndex}">Xác nhận đã giao</button>` : ''}</div>` : '';
       $('editor-fields').innerHTML = orderDetail + table.headers.map((h,i) => {
         if (!h) return '';
         if ((current === 'Orders' || current === 'Redemptions') && row && h !== 'Status') return '';

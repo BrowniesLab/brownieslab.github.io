@@ -359,7 +359,7 @@ async function createOrder(b, ctx) {
   const earned = pointsFor(ctx.env, lines);
   const orderId = 'BL' + formatCompact(new Date()) + '-' + Math.random().toString(36).slice(2, 5).toUpperCase();
   const createdAt = new Date().toISOString();
-  const paymentStatus = checkout.paymentMethod === 'Thanh toán trước' ? 'Cần gửi minh chứng' : 'Thanh toán khi nhận hàng';
+  const paymentStatus = checkout.paymentMethod === 'Thanh toán trước' ? 'Cần gửi minh chứng' : 'Chưa thanh toán';
 
   await ctx.env.DB.prepare(
     `INSERT INTO orders (
@@ -681,7 +681,11 @@ async function adminConfirmPayment(b, ctx) {
 
   const method = row.payment_method || '';
   if (method === 'Thanh toán trước') {
-    if (!row.payment_proof_url) throw new Error('Khách chưa gửi ảnh minh chứng thanh toán.');
+    // Đơn cũ (import từ dữ liệu trước khi có tính năng upload ảnh) có thể đã được ghi nhận
+    // "Đã thanh toán" mà không có ảnh — vẫn cho xác nhận trong trường hợp đó.
+    if (!row.payment_proof_url && !/đã thanh toán/i.test(row.payment_status || '')) {
+      throw new Error('Khách chưa gửi ảnh minh chứng thanh toán.');
+    }
     if (!/chờ xác nhận|đã thanh toán/i.test(row.payment_status || '')) throw new Error('Ảnh thanh toán chưa ở trạng thái chờ xác nhận.');
   } else if (method !== 'Thanh toán khi nhận hàng') {
     throw new Error('Đơn chưa có phương thức thanh toán hợp lệ.');

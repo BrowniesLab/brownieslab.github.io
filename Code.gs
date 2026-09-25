@@ -345,7 +345,7 @@ function createOrder_(token, items, checkout) {
     PickupDate: checkoutData.PickupDate,
     PickupTime: checkoutData.PickupTime,
     PaymentMethod: checkoutData.PaymentMethod,
-    PaymentStatus: checkoutData.PaymentMethod === 'Thanh toán trước' ? 'Cần gửi minh chứng' : 'Thanh toán khi nhận hàng',
+    PaymentStatus: checkoutData.PaymentMethod === 'Thanh toán trước' ? 'Cần gửi minh chứng' : 'Chưa thanh toán',
     PaymentProofUrl: ''
   };
   appendObject_(table_('Orders'), order);
@@ -413,7 +413,11 @@ function adminConfirmPayment_(token, rowIndex, matchKey) {
   if (isCancelledStatus_(order.Status) || isCancelledStatus_(order.PaymentStatus)) throw new Error('Không thể xác nhận thanh toán cho đơn đã huỷ.');
   var method = String(order.PaymentMethod || '');
   if (method === 'Thanh toán trước') {
-    if (!String(order.PaymentProofUrl || '')) throw new Error('Khách chưa gửi ảnh minh chứng thanh toán.');
+    // Đơn cũ (import từ dữ liệu trước khi có tính năng upload ảnh) có thể đã được ghi nhận
+    // "Đã thanh toán" mà không có ảnh — vẫn cho xác nhận trong trường hợp đó.
+    if (!String(order.PaymentProofUrl || '') && !/đã thanh toán/i.test(String(order.PaymentStatus || ''))) {
+      throw new Error('Khách chưa gửi ảnh minh chứng thanh toán.');
+    }
     if (!/chờ xác nhận|đã thanh toán/i.test(String(order.PaymentStatus || ''))) throw new Error('Ảnh thanh toán chưa ở trạng thái chờ xác nhận.');
   } else if (method !== 'Thanh toán khi nhận hàng') {
     throw new Error('Đơn chưa có phương thức thanh toán hợp lệ.');
