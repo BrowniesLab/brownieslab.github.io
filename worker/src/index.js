@@ -403,8 +403,16 @@ async function adminCreateOrder(b, ctx) {
     if (!(qty >= 1 && qty <= 99 && Math.floor(qty) === qty)) throw new Error('Số lượng không hợp lệ.');
     if (seen[id]) throw new Error('Món bị lặp trong đơn.');
     seen[id] = true;
-    lines.push({ itemId: id, name: m.name, price: Number(m.price) || 0, qty });
-    total += (Number(m.price) || 0) * qty;
+    // Admin có thể ghi đè giá (đơn giá cũ, bán trước khi công bố giá hiện tại); mặc định
+    // lấy giá Menu hiện tại nếu không truyền price.
+    let price = Number(m.price) || 0;
+    if (it && it.price !== undefined && it.price !== null && it.price !== '') {
+      const customPrice = Number(it.price);
+      if (!Number.isFinite(customPrice) || customPrice < 0) throw new Error('Giá món "' + id + '" không hợp lệ.');
+      price = customPrice;
+    }
+    lines.push({ itemId: id, name: m.name, price, qty });
+    total += price * qty;
   }
 
   const earned = pointsFor(ctx.env, lines);

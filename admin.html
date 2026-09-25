@@ -395,11 +395,17 @@
       }
       $('new-order-items').innerHTML = newOrderMenu.map(m => `
         <div class="order-ref-top" style="padding:.4rem 0" data-id="${escapeHtml(m.itemId)}">
-          <span>${escapeHtml(m.name)} <span class="muted">(${formatVND(m.price)})</span></span>
-          <span class="stepper">
-            <button type="button" data-act="dec" aria-label="Bớt ${escapeHtml(m.name)}">−</button>
-            <output aria-live="polite">0</output>
-            <button type="button" data-act="inc" aria-label="Thêm ${escapeHtml(m.name)}">+</button>
+          <span>${escapeHtml(m.name)}</span>
+          <span style="display:flex;align-items:center;gap:.6rem">
+            <label class="field" style="margin:0">
+              <input type="number" class="new-order-price" min="0" step="1000" value="${Number(m.price) || 0}"
+                     style="width:6.5rem" aria-label="Giá ${escapeHtml(m.name)}" title="Giá cho đơn này (sửa được nếu bán giá cũ)">
+            </label>
+            <span class="stepper">
+              <button type="button" data-act="dec" aria-label="Bớt ${escapeHtml(m.name)}">−</button>
+              <output aria-live="polite">0</output>
+              <button type="button" data-act="inc" aria-label="Thêm ${escapeHtml(m.name)}">+</button>
+            </span>
           </span>
         </div>`).join('');
     }
@@ -424,7 +430,10 @@
     $('new-order-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const f = e.target;
-      const items = [...newOrderQty].map(([itemId, qty]) => ({ itemId, qty }));
+      const items = [...newOrderQty].map(([itemId, qty]) => {
+        const priceInput = $('new-order-items').querySelector(`[data-id="${itemId}"] .new-order-price`);
+        return { itemId, qty, price: priceInput ? priceInput.value : undefined };
+      });
       if (!items.length) { handleError(new Error('Chọn ít nhất 1 món.')); return; }
       try {
         const r = await withBusy($('new-order-save'), () => api('adminCreateOrder', {

@@ -381,8 +381,16 @@ function adminCreateOrder_(token, phone, customerName, items, checkout) {
     if (!(qty >= 1 && qty <= 99 && Math.floor(qty) === qty)) throw new Error('Số lượng không hợp lệ.');
     if (seen[id]) throw new Error('Món bị lặp trong đơn.');
     seen[id] = true;
-    lines.push({ itemId: id, name: menu[id].name, price: menu[id].price, qty: qty });
-    total += menu[id].price * qty;
+    // Admin có thể ghi đè giá (đơn giá cũ, bán trước khi công bố giá hiện tại); mặc định
+    // lấy giá Menu hiện tại nếu không truyền price.
+    var price = Number(menu[id].price) || 0;
+    if (it && it.price !== undefined && it.price !== null && it.price !== '') {
+      var customPrice = Number(it.price);
+      if (isNaN(customPrice) || customPrice < 0) throw new Error('Giá món "' + id + '" không hợp lệ.');
+      price = customPrice;
+    }
+    lines.push({ itemId: id, name: menu[id].name, price: price, qty: qty });
+    total += price * qty;
   });
 
   var earned = pointsFor_(lines);
