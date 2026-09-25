@@ -100,7 +100,12 @@
 
   <script src="app.js"></script>
   <script>
-    if (Session.get()) location.replace('order.html');
+    // ?next= cho trang gọi tới (ví dụ order.html?edit=1 để giữ giỏ hàng đang chọn dở).
+    function nextUrl() {
+      const n = new URLSearchParams(location.search).get('next');
+      return n && n.startsWith('order.html') ? n : 'order.html';
+    }
+    if (Session.get()) location.replace(nextUrl());
 
     const tabs  = { login: document.getElementById('tab-login'), register: document.getElementById('tab-register') };
     const forms = { login: document.getElementById('form-login'), register: document.getElementById('form-register') };
@@ -120,7 +125,7 @@
     function checkPin(pin) {
       if (!/^\d{4,6}$/.test(pin)) throw new Error('PIN phải gồm 4 đến 6 chữ số.');
     }
-    function onSuccess(session) { Session.set(session); location.replace('order.html'); }
+    function onSuccess(session) { Session.set(session); location.replace(nextUrl()); }
 
     forms.login.addEventListener('submit', async (e) => {
       e.preventDefault(); const f = e.target;

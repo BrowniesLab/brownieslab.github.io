@@ -16,7 +16,8 @@
       </a>
       <span class="spacer"></span>
       <a class="linkbtn" id="admin-link" href="admin.html" hidden>Quản trị</a>
-      <button class="linkbtn" id="logout" type="button">Đăng xuất</button>
+      <button class="linkbtn" id="logout" type="button" hidden>Đăng xuất</button>
+      <a class="linkbtn" id="login-link" href="index.html" hidden>Đăng nhập / Đăng ký</a>
     </div>
   </header>
 
@@ -33,12 +34,16 @@
       </div>
     </section>
 
-    <!-- Điểm thưởng -->
-    <section class="points" aria-live="polite">
+    <!-- Điểm thưởng (khách chưa đăng nhập thấy lời mời đăng nhập thay vì điểm) -->
+    <section class="points" aria-live="polite" id="points-section">
       <span class="num" id="points">…</span>
       <span class="label">điểm thưởng</span>
       <a class="linkbtn points-redeem" href="redeem.html">Đổi điểm</a>
       <ul class="rule" id="points-rule"></ul>
+    </section>
+    <section class="points" id="guest-points-cta" hidden>
+      <span class="label">Đăng nhập để xem điểm thưởng và lịch sử đơn của bạn.</span>
+      <a class="linkbtn" href="index.html">Đăng nhập / Đăng ký</a>
     </section>
 
     <!-- Tabs -->
@@ -130,7 +135,9 @@
   </script>
 
   <script>
-    const session = requireSession();
+    // Khách chưa đăng nhập vẫn xem được menu, giống web bán hàng thông thường —
+    // chỉ bắt đăng nhập khi thanh toán hoặc xem điểm/lịch sử đơn của riêng họ.
+    let session = Session.get();
     let menu = [];
     const cart = new Map();
     let rule = { pointsPerBox: 1, signupBonus: 2, freeBoxPoints: 10 };
@@ -141,9 +148,16 @@
       $('hello').textContent = 'Xin chào, ' + session.name;
       $('admin-link').hidden = !session.isAdmin;
       $('points').textContent = session.points;
+      $('logout').hidden = false;
       $('logout').addEventListener('click', logout);
-      init();
+      refreshPoints();
+    } else {
+      $('hello').textContent = 'Xem menu trước, đăng nhập lúc thanh toán';
+      $('login-link').hidden = false;
+      $('points-section').hidden = true;
+      $('guest-points-cta').hidden = false;
     }
+    init();
 
     const estimatePoints = (boxes) => boxes ? boxes * rule.pointsPerBox : 0;
 
@@ -158,7 +172,6 @@
     }
 
     async function init() {
-      refreshPoints();
       try {
         menu = await apiGet('getMenu');
         restoreCartForEdit();
@@ -292,10 +305,21 @@
       sessionStorage.setItem('brownieslab.checkout', JSON.stringify({
         items: lines.map(l => ({ itemId: l.itemId, qty: l.qty }))
       }));
+      if (!session) {
+        // Chưa đăng nhập: giữ giỏ hàng, đưa qua đăng nhập/đăng ký rồi quay lại đây với giỏ hàng cũ.
+        toast('Đăng nhập hoặc tạo tài khoản để đặt bánh nhé.', 'info');
+        location.assign('index.html?next=' + encodeURIComponent('order.html?edit=1'));
+        return;
+      }
       location.assign('checkout.html');
     });
 
     function showTab(which) {
+      if (which === 'history' && !session) {
+        toast('Đăng nhập để xem đơn của bạn.', 'info');
+        location.assign('index.html?next=' + encodeURIComponent('order.html?tab=history'));
+        return;
+      }
       const isMenu = which === 'menu';
       $('tab-menu').setAttribute('aria-selected', String(isMenu));
       $('tab-history').setAttribute('aria-selected', String(!isMenu));
