@@ -11,6 +11,7 @@
  */
 
 const TZ = 'Asia/Ho_Chi_Minh';
+const MAX_BOXES_PER_BATCH = 30;
 
 // ===================== ROUTER =====================
 export default {
@@ -80,6 +81,7 @@ const ACTIONS = {
   createOrder:        (b, ctx) => createOrder(b, ctx),
   cancelOrder:        (b, ctx) => cancelOrder(b, ctx),
   myOrders:           (b, ctx) => myOrders(b, ctx),
+  pickupAvailability: (b, ctx) => pickupAvailability(b, ctx),
   myPoints:           (b, ctx) => myPoints(b, ctx),
   createRedemption:   (b, ctx) => createRedemption(b, ctx),
   myRedemptions:      (b, ctx) => myRedemptions(b, ctx),
@@ -313,6 +315,83 @@ function pointsFor(env, lines) {
   return boxes * cfg(env, 'POINTS_PER_BOX');
 }
 
+
+/** Lịch chốt sổ và các đợt kế tiếp có thể dùng khi đợt gần nhất đã đầy. */
+function pickupDateSchedule(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(now);
+  const get = type => Number(parts.find(part => part.type === type).value);
+  const cursor = new Date(Date.UTC(get('year'), get('month') - 1, get('day'), 12));
+  const currentDay = cursor.getUTCDay();
+  const optionLimit = (currentDay === 2 || currentDay === 3) ? 2 : 1;
+  const firstWeekday = currentDay >= 4 ? 1 : 5;
+  const dates = [];
+  let collecting = false;
+  for (let offset = 1; offset < 90 && dates.length < 12; offset++) {
+    const d = new Date(cursor);
+    d.setUTCDate(d.getUTCDate() + offset);
+    const weekday = d.getUTCDay();
+    if (!collecting && weekday !== firstWeekday) continue;
+    if (!collecting) collecting = true;
+    if (weekday === 1 || weekday === 5) dates.push(d);
+  }
+  return {
+    dates: dates.map(d => {
+      const weekday = d.getUTCDay() === 1 ? 'Thứ 2' : 'Thứ 6';
+      const day = String(d.getUTCDate()).padStart(2, '0');
+      const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+      return weekday + ' (' + day + '/' + month + ')';
+    }),
+    optionLimit
+  };
+}
+
+function requestedBoxCount(value) {
+  const boxes = Number(value);
+  if (!(boxes >= 1 && boxes <= MAX_BOXES_PER_BATCH && Math.floor(boxes) === boxes)) {
+    throw new Error('Mỗi đơn chỉ có thể đặt từ 1 đến ' + MAX_BOXES_PER_BATCH + ' hộp.');
+  }
+  return boxes;
+}
+
+async function pickupAvailability(b, ctx) {
+  await requireUser(ctx.env, b.token);
+  const boxes = requestedBoxCount(b.boxCount);
+  const schedule = pickupDateSchedule();
+  const placeholders = schedule.dates.map(() => '?').join(',');
+  const rows = placeholders
+    ? (await ctx.env.DB.prepare(`SELECT pickup_date, boxes_reserved FROM pickup_batches WHERE pickup_date IN (${placeholders})`).bind(...schedule.dates).all()).results
+    : [];
+  const reserved = new Map(rows.map(row => [row.pickup_date, Number(row.boxes_reserved) || 0]));
+  const slots = schedule.dates.map(date => {
+    const remaining = Math.max(0, MAX_BOXES_PER_BATCH - (reserved.get(date) || 0));
+    return { date, remaining, selectable: remaining >= boxes };
+  });
+  const dates = [];
+  let selectableCount = 0;
+  for (const slot of slots) {
+    dates.push(slot);
+    if (slot.selectable) selectableCount++;
+    if (selectableCount >= schedule.optionLimit) break;
+  }
+  return { maxBoxes: MAX_BOXES_PER_BATCH, dates };
+}
+
+async function reservePickupBoxes(env, pickupDate, boxes) {
+  const res = await env.DB.prepare(
+    `INSERT INTO pickup_batches (pickup_date, boxes_reserved) VALUES (?, ?)
+     ON CONFLICT(pickup_date) DO UPDATE SET boxes_reserved = pickup_batches.boxes_reserved + excluded.boxes_reserved
+     WHERE pickup_batches.boxes_reserved + excluded.boxes_reserved <= ?`
+  ).bind(pickupDate, boxes, MAX_BOXES_PER_BATCH).run();
+  if (res.meta.changes !== 1) throw new Error('Đợt nhận bánh này vừa đủ 30 hộp. Vui lòng chọn ngày gần nhất kế tiếp.');
+}
+
+async function releasePickupBoxes(env, pickupDate, boxes) {
+  return env.DB.prepare('UPDATE pickup_batches SET boxes_reserved = MAX(0, boxes_reserved - ?) WHERE pickup_date = ?')
+    .bind(boxes, pickupDate).run();
+}
+
 function buildCheckout(user, phone, c) {
   c = c || {};
   const sameRecipient = c.sameRecipient !== false;
@@ -329,6 +408,7 @@ function buildCheckout(user, phone, c) {
 
   if (!recipientName) throw new Error('Vui lòng nhập họ tên người nhận.');
   if (!pickupDate || !pickupTime) throw new Error('Vui lòng chọn ngày và thời gian nhận bánh.');
+  if (!pickupDateSchedule().dates.includes(pickupDate)) throw new Error('Ngày nhận bánh đã qua hoặc không còn mở. Vui lòng tải lại trang để chọn ngày mới.');
   if (fulfillmentType === 'Nhận tại NEU' && !pickupLocation) throw new Error('Vui lòng ghi toà nhà, phòng hoặc giảng đường nhận bánh tại NEU.');
   if (fulfillmentType === 'Giao tận nơi' && !deliveryAddress) throw new Error('Vui lòng ghi địa chỉ giao bánh.');
 
@@ -357,22 +437,31 @@ async function createOrder(b, ctx) {
     total += (Number(m.price) || 0) * qty;
   }
 
+  const boxCount = requestedBoxCount(lines.reduce((sum, line) => sum + line.qty, 0));
   const earned = pointsFor(ctx.env, lines);
   const orderId = 'BL' + formatCompact(new Date()) + '-' + Math.random().toString(36).slice(2, 5).toUpperCase();
   const createdAt = new Date().toISOString();
   const paymentStatus = checkout.paymentMethod === 'Thanh toán trước' ? 'Cần gửi minh chứng' : 'Chưa thanh toán';
 
-  await ctx.env.DB.prepare(
-    `INSERT INTO orders (
-       order_id, phone, customer_name, items_json, total, points_earned, points_credited, status, created_at, note,
-       recipient_name, recipient_phone, recipient_message, fulfillment_type, pickup_location, delivery_address,
-       pickup_date, pickup_time, payment_method, payment_status, payment_proof_url
-     ) VALUES (?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,'')`
-  ).bind(
-    orderId, phone, user.name || '', JSON.stringify(lines), total, earned, cfg(ctx.env, 'NEW_ORDER_STATUS'), createdAt, checkout.note,
-    checkout.recipientName, checkout.recipientPhone, checkout.recipientMessage, checkout.fulfillmentType, checkout.pickupLocation, checkout.deliveryAddress,
-    checkout.pickupDate, checkout.pickupTime, checkout.paymentMethod, paymentStatus
-  ).run();
+  let reserved = false;
+  try {
+    await reservePickupBoxes(ctx.env, checkout.pickupDate, boxCount);
+    reserved = true;
+    await ctx.env.DB.prepare(
+      `INSERT INTO orders (
+         order_id, phone, customer_name, items_json, total, points_earned, points_credited, status, created_at, note,
+         recipient_name, recipient_phone, recipient_message, fulfillment_type, pickup_location, delivery_address,
+         pickup_date, pickup_time, payment_method, payment_status, payment_proof_url
+       ) VALUES (?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,'')`
+    ).bind(
+      orderId, phone, user.name || '', JSON.stringify(lines), total, earned, cfg(ctx.env, 'NEW_ORDER_STATUS'), createdAt, checkout.note,
+      checkout.recipientName, checkout.recipientPhone, checkout.recipientMessage, checkout.fulfillmentType, checkout.pickupLocation, checkout.deliveryAddress,
+      checkout.pickupDate, checkout.pickupTime, checkout.paymentMethod, paymentStatus
+    ).run();
+  } catch (err) {
+    if (reserved) await releasePickupBoxes(ctx.env, checkout.pickupDate, boxCount);
+    throw err;
+  }
 
   return { orderId, total, pointsEarned: earned, points: Number(user.points) || 0, paymentMethod: checkout.paymentMethod };
 }
@@ -446,7 +535,12 @@ async function cancelOrder(b, ctx) {
   const { user, order } = await requireCustomerOrder(ctx.env, b.token, b.orderId);
   if (!canCancelOrder(order.status, order.payment_status)) throw new Error('Đơn này không thể huỷ online. Vui lòng nhắn Brownies Lab để được hỗ trợ.');
 
-  await ctx.env.DB.prepare("UPDATE orders SET status = 'Đã huỷ', payment_status = 'Đã huỷ' WHERE id = ?").bind(order.id).run();
+  let boxCount = 0;
+  try { boxCount = JSON.parse(order.items_json || '[]').reduce((sum, line) => sum + (Number(line.qty) || 0), 0); } catch (e) {}
+  await ctx.env.DB.batch([
+    ctx.env.DB.prepare("UPDATE orders SET status = 'Đã huỷ', payment_status = 'Đã huỷ' WHERE id = ?").bind(order.id),
+    ctx.env.DB.prepare('UPDATE pickup_batches SET boxes_reserved = MAX(0, boxes_reserved - ?) WHERE pickup_date = ?').bind(boxCount, order.pickup_date)
+  ]);
 
   let newPoints = Number(user.points) || 0;
   if (order.points_credited) {
@@ -680,6 +774,7 @@ function coerceForStorage(header, value, def) {
 async function adminAddRow(b, ctx) {
   await requireAdmin(ctx.env, b.token);
   if (b.sheet === 'Redemptions') throw new Error('Yêu cầu đổi điểm chỉ được tạo bởi khách hàng trên trang đổi điểm.');
+  if (b.sheet === 'Orders') throw new Error('Đơn phải được tạo từ trang đặt bánh để giữ đúng sức chứa từng đợt.');
   const def = sheetDef(b.sheet);
   const prepared = await prepareAdminData(def, b.data || {}, null, ctx.env, b.sheet);
   const cols = [], placeholders = [], vals = [];
@@ -696,9 +791,12 @@ async function adminUpdateRow(b, ctx) {
   await requireAdmin(ctx.env, b.token);
   const def = sheetDef(b.sheet);
   if (b.sheet === 'Orders') {
-    const blocked = ['PointsEarned', 'PointsCredited', 'PaymentMethod', 'PaymentStatus'];
+    const blocked = ['PointsEarned', 'PointsCredited', 'PaymentMethod', 'PaymentStatus', 'ItemsJSON', 'PickupDate'];
     if (blocked.some(k => Object.prototype.hasOwnProperty.call(b.data || {}, k))) {
-      throw new Error('Dùng nút "Xác nhận TT & cộng điểm" để xác nhận thanh toán và cộng điểm.');
+      throw new Error('Không thể sửa món, ngày nhận hoặc thanh toán trực tiếp vì sẽ làm lệch sức chứa/điểm.');
+    }
+    if (Object.prototype.hasOwnProperty.call(b.data || {}, 'Status') && isCancelledStatus(b.data.Status)) {
+      throw new Error('Không thể huỷ đơn từ admin. Khách cần huỷ trên trang đơn hàng để hệ thống hoàn số hộp.');
     }
   }
   if (b.sheet === 'Redemptions' && Object.keys(b.data || {}).some(k => k !== 'Status')) {
@@ -724,6 +822,7 @@ async function adminDeleteRow(b, ctx) {
   const admin = await requireAdmin(ctx.env, b.token);
   const def = sheetDef(b.sheet);
   if (b.sheet === 'Redemptions') throw new Error('Không thể xoá yêu cầu đổi điểm để giữ lịch sử trừ điểm.');
+  if (b.sheet === 'Orders') throw new Error('Không thể xoá đơn để giữ đúng sức chứa từng đợt.');
   const row = await checkRow(ctx.env, def, b.rowIndex, b.matchKey);
   if (b.sheet === 'Users' && String(row.phone) === String(admin.phone)) {
     throw new Error('Không thể tự xoá tài khoản admin đang đăng nhập.');

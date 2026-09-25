@@ -89,16 +89,30 @@
     try { savedCheckout = JSON.parse(sessionStorage.getItem(CHECKOUT_FORM_KEY) || 'null'); } catch (e) {}
     if (!session || !draft || !Array.isArray(draft.items) || !draft.items.length) location.replace('order.html');
 
-    function renderDates() {
-      const days = [];
-      for (let offset = 0; offset < 21 && days.length < 2; offset++) {
-        const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + offset);
-        if ((d.getDay() === 1 || d.getDay() === 5) && !days.some(x => x.getDay() === d.getDay())) days.push(d);
+    function cartBoxCount() {
+      return draft.items.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+    }
+
+    async function renderDates() {
+      const select = $('pickup-date');
+      const previousSelection = select.value;
+      select.disabled = true;
+      select.innerHTML = '<option>Đang kiểm tra chỗ trống…</option>';
+      const availability = await api('pickupAvailability', { boxCount: cartBoxCount() });
+      const dates = availability.dates || [];
+      if (!dates.length) {
+        select.innerHTML = '<option value="">Các đợt gần nhất đã đủ hộp</option>';
+        return;
       }
-      $('pickup-date').innerHTML = days.map(d => {
-        const weekday = d.getDay() === 1 ? 'Thứ 2' : 'Thứ 6';
-        return `<option value="${weekday} (${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')})">${weekday} (${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')})</option>`;
+      const firstSelectable = dates.find(slot => slot.selectable);
+      select.disabled = !firstSelectable;
+      select.innerHTML = dates.map(slot => {
+        const unavailable = !slot.selectable;
+        const suffix = unavailable ? ' · không đủ chỗ' : '';
+        return `<option value="${slot.date}"${unavailable ? ' disabled' : ''}>${slot.date} · còn ${slot.remaining}/${availability.maxBoxes} hộp${suffix}</option>`;
       }).join('');
+      const selected = dates.find(slot => slot.selectable && slot.date === previousSelection) || firstSelectable;
+      if (selected) select.value = selected.date;
     }
 
     function toggleRecipient() { $('recipient-fields').hidden = $('same-recipient').checked; }
@@ -141,11 +155,11 @@
 
     function estimatePoints(count) { return count * pointRule.pointsPerBox; }
     async function init() {
-      renderDates();
-      restoreCheckout(savedCheckout);
       try {
         const [activeMenu, p] = await Promise.all([apiGet('getMenu'), api('myPoints')]);
         menu = activeMenu; pointRule = { ...pointRule, ...(p.rule || {}) };
+        await renderDates();
+        restoreCheckout(savedCheckout);
         const lines = draft.items.map(i => {
           const m = menu.find(x => x.itemId === i.itemId);
           return m ? { ...m, qty: Number(i.qty) || 0 } : null;
@@ -155,7 +169,11 @@
         const count = lines.reduce((sum, l) => sum + l.qty, 0);
         $('checkout-lines').className = '';
         $('checkout-lines').innerHTML = `<ul class="checkout-items">${lines.map(l => `<li><span>${escapeHtml(l.name)} × ${l.qty}</span><strong>${formatVND(l.price * l.qty)}</strong></li>`).join('')}</ul><dl class="receipt-summary"><div><dt>Số lượng bánh</dt><dd>${count} hộp</dd></div><div><dt>Tổng số tiền</dt><dd>${formatVND(total)}</dd></div><div class="earn"><dt>Điểm cộng</dt><dd>+${estimatePoints(count)}</dd></div></dl>`;
-      } catch (err) { $('checkout-lines').className = 'empty'; $('checkout-lines').textContent = err.message; handleError(err); }
+      } catch (err) {
+        $('checkout-lines').className = 'empty';
+        $('checkout-lines').textContent = err.message;
+        handleError(err);
+      }
     }
 
     $('checkout-form').addEventListener('submit', async (e) => {
@@ -176,12 +194,18 @@
           sessionStorage.removeItem(CHECKOUT_FORM_KEY);
           location.replace('order-success.html');
         }
-      } catch (err) { handleError(err); }
+      } catch (err) {
+        if (/vừa đủ 30 hộp/i.test(String(err.message || err))) await renderDates().catch(() => {});
+        handleError(err);
+      }
     });
 
     document.querySelectorAll('[name=payment-method]').forEach(el => el.addEventListener('change', updatePaymentMethodNote));
 
-    if (session && draft) init();
+    if (session && draft) {
+      init();
+      window.setInterval(() => { renderDates().catch(handleError); }, 60 * 1000);
+    }
   </script>
 </body>
 </html>

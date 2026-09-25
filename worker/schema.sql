@@ -63,6 +63,12 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 CREATE INDEX IF NOT EXISTS idx_orders_phone ON orders(phone);
 
+-- Sức chứa đã giữ cho từng đợt giao. Giá trị được Worker cập nhật atomically.
+CREATE TABLE IF NOT EXISTS pickup_batches (
+  pickup_date TEXT PRIMARY KEY,
+  boxes_reserved INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS redemptions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   redemption_id TEXT NOT NULL UNIQUE,
