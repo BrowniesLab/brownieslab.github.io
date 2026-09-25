@@ -43,7 +43,8 @@ export default {
       }
       const fn = ACTIONS[action];
       if (!fn) throw new Error('Action không hợp lệ: ' + action);
-      if (RATE_LIMITED_ACTIONS.has(action)) await checkRateLimit(env, request, action);
+      if (RATE_LIMITED_ACTIONS.has(action)) await checkRateLimit(env, request, action, RATE_LIMIT_MAX);
+      else if (READ_RATE_LIMITED_ACTIONS.has(action)) await checkRateLimit(env, request, action, READ_RATE_LIMIT_MAX);
       const data = await fn(body || {}, { env, request });
       return jsonRes({ ok: true, data }, cors);
     } catch (err) {
@@ -99,15 +100,21 @@ const RATE_LIMITED_ACTIONS = new Set([
   'register', 'login', 'createOrder', 'cancelOrder', 'uploadPaymentProof', 'createRedemption'
 ]);
 const RATE_LIMIT_MAX = 30;      // tối đa 30 lần/loại action/IP
+
+// Action chỉ đọc, giờ public (xem menu không cần đăng nhập) — giới hạn rộng hơn nhiều,
+// chỉ để chặn crawler/bot dội liên tục, không ảnh hưởng khách xem menu bình thường.
+const READ_RATE_LIMITED_ACTIONS = new Set(['getMenu']);
+const READ_RATE_LIMIT_MAX = 300;
+
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // trong 10 phút
 
-async function checkRateLimit(env, request, action) {
+async function checkRateLimit(env, request, action, max) {
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
   const bucket = action + ':' + ip;
   const now = Date.now();
   const row = await env.DB.prepare('SELECT count, window_start FROM rate_limits WHERE bucket = ?').bind(bucket).first();
   if (row && now - new Date(row.window_start).getTime() < RATE_LIMIT_WINDOW_MS) {
-    if (row.count >= RATE_LIMIT_MAX) {
+    if (row.count >= max) {
       throw new Error('Bạn thao tác quá nhanh, vui lòng thử lại sau vài phút.');
     }
     await env.DB.prepare('UPDATE rate_limits SET count = count + 1 WHERE bucket = ?').bind(bucket).run();
