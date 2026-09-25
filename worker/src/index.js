@@ -522,22 +522,33 @@ async function adminCreateOrder(b, ctx) {
     total += price * qty;
   }
 
+  const boxCount = requestedBoxCount(lines.reduce((sum, line) => sum + line.qty, 0));
   const earned = pointsFor(ctx.env, lines);
   const orderId = 'BL' + formatCompact(new Date()) + '-A' + Math.random().toString(36).slice(2, 5).toUpperCase();
   const createdAt = new Date().toISOString();
   const paymentStatus = checkout.paymentMethod === 'Thanh toán trước' ? 'Cần gửi minh chứng' : 'Chưa thanh toán';
 
-  await ctx.env.DB.prepare(
-    `INSERT INTO orders (
-       order_id, phone, customer_name, items_json, total, points_earned, points_credited, status, created_at, note,
-       recipient_name, recipient_phone, recipient_message, fulfillment_type, pickup_location, delivery_address,
-       pickup_date, pickup_time, payment_method, payment_status, payment_proof_url
-     ) VALUES (?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,'')`
-  ).bind(
-    orderId, phone, customerName, JSON.stringify(lines), total, earned, cfg(ctx.env, 'NEW_ORDER_STATUS'), createdAt, checkout.note,
-    checkout.recipientName, checkout.recipientPhone, checkout.recipientMessage, checkout.fulfillmentType, checkout.pickupLocation, checkout.deliveryAddress,
-    checkout.pickupDate, checkout.pickupTime, checkout.paymentMethod, paymentStatus
-  ).run();
+  // Giữ đúng chỗ trong đợt giao (pickup_batches) như đơn khách tự đặt, để không bán vượt
+  // MAX_BOXES_PER_BATCH khi cộng cả đơn admin nhập tay lẫn đơn khách tự đặt cùng ngày.
+  let reserved = false;
+  try {
+    await reservePickupBoxes(ctx.env, checkout.pickupDate, boxCount);
+    reserved = true;
+    await ctx.env.DB.prepare(
+      `INSERT INTO orders (
+         order_id, phone, customer_name, items_json, total, points_earned, points_credited, status, created_at, note,
+         recipient_name, recipient_phone, recipient_message, fulfillment_type, pickup_location, delivery_address,
+         pickup_date, pickup_time, payment_method, payment_status, payment_proof_url
+       ) VALUES (?,?,?,?,?,?,0,?,?,?,?,?,?,?,?,?,?,?,?,?,'')`
+    ).bind(
+      orderId, phone, customerName, JSON.stringify(lines), total, earned, cfg(ctx.env, 'NEW_ORDER_STATUS'), createdAt, checkout.note,
+      checkout.recipientName, checkout.recipientPhone, checkout.recipientMessage, checkout.fulfillmentType, checkout.pickupLocation, checkout.deliveryAddress,
+      checkout.pickupDate, checkout.pickupTime, checkout.paymentMethod, paymentStatus
+    ).run();
+  } catch (err) {
+    if (reserved) await releasePickupBoxes(ctx.env, checkout.pickupDate, boxCount);
+    throw err;
+  }
 
   return { orderId, total, pointsEarned: earned, paymentMethod: checkout.paymentMethod };
 }

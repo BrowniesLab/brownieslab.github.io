@@ -72,10 +72,13 @@
       <label class="field" id="new-order-delivery-field" hidden><span>Địa chỉ giao bánh</span><input name="deliveryAddress" placeholder="Địa chỉ chi tiết"></label>
 
       <div class="field-grid">
-        <label class="field"><span>Ngày nhận bánh</span><input name="pickupDate" placeholder="Ví dụ: Thứ 6 (25/09)"></label>
-        <label class="field"><span>Thời gian nhận bánh</span><input name="pickupTime" placeholder="Ví dụ: Sáng (10–11h)"></label>
+        <label class="field"><span>Ngày nhận bánh</span><select name="pickupDate" required><option value="">Chọn món trước để xem ngày còn chỗ</option></select></label>
+        <label class="field"><span>Thời gian nhận bánh</span><select name="pickupTime" required>
+          <option value="Sáng (10–11h)">Sáng (10–11h)</option>
+          <option value="Trưa (12–13h)">Trưa (12–13h)</option>
+          <option value="Chiều (15–16h)">Chiều (15–16h)</option>
+        </select></label>
       </div>
-      <p class="small muted" id="new-order-capacity" aria-live="polite">Nhập ngày nhận bánh để xem số hộp còn lại.</p>
 
       <p style="font-weight:700;margin:.9rem 0 .4rem">Thanh toán</p>
       <div class="choice-row" role="radiogroup" aria-label="Phương thức thanh toán">
@@ -382,7 +385,7 @@
       $('new-order-pickup-field').hidden = false;
       $('new-order-delivery-field').hidden = true;
       $('new-order').showModal();
-      $('new-order-capacity').textContent = 'Nhập ngày nhận bánh để xem số hộp còn lại.';
+      renderNewOrderDates();
       if (!newOrderMenu) {
         try { newOrderMenu = await apiGet('getMenu'); }
         catch (err) { $('new-order-items').innerHTML = '<p class="empty">Không tải được menu.</p>'; handleError(err); return; }
@@ -419,28 +422,43 @@
       const qty = (newOrderQty.get(id) || 0) + (btn.dataset.act === 'inc' ? 1 : -1);
       if (qty <= 0) newOrderQty.delete(id); else newOrderQty.set(id, Math.min(qty, 99));
       btn.closest('.stepper').querySelector('output').textContent = newOrderQty.get(id) || 0;
+      renderNewOrderDates();
     });
 
-    async function showNewOrderCapacity() {
-      const pickupDate = $('new-order-form').elements.pickupDate.value.trim();
-      const output = $('new-order-capacity');
-      if (!pickupDate) {
-        output.textContent = 'Nhập ngày nhận bánh để xem số hộp còn lại.';
+    /** Đúng danh sách ngày + số hộp còn lại như checkout.html — tránh đơn nhập tay chọn
+     * ngày/định dạng mà backend không chấp nhận (buildCheckout chỉ nhận đúng ngày đang mở). */
+    async function renderNewOrderDates() {
+      const select = $('new-order-form').elements.pickupDate;
+      const boxCount = [...newOrderQty.values()].reduce((sum, qty) => sum + qty, 0);
+      if (!boxCount) {
+        select.innerHTML = '<option value="">Chọn món trước để xem ngày còn chỗ</option>';
+        select.disabled = true;
         return;
       }
-      output.textContent = 'Đang kiểm tra số hộp còn lại…';
+      const previousSelection = select.value;
+      select.disabled = true;
+      select.innerHTML = '<option>Đang kiểm tra chỗ trống…</option>';
       try {
-        const capacity = await api('adminPickupCapacity', { pickupDate });
-        if ($('new-order-form').elements.pickupDate.value.trim() !== pickupDate) return;
-        output.textContent = `Đơn web đang giữ ${capacity.reserved}/${capacity.maxBoxes} hộp · còn ${capacity.remaining}/${capacity.maxBoxes} hộp. Đơn nhập tay không tự trừ suất.`;
-      } catch (err) {
-        if ($('new-order-form').elements.pickupDate.value.trim() === pickupDate) {
-          output.textContent = 'Chưa kiểm tra được sức chứa của ngày này.';
+        const availability = await api('pickupAvailability', { boxCount });
+        const dates = availability.dates || [];
+        if (!dates.length) {
+          select.innerHTML = '<option value="">Các đợt gần nhất đã đủ hộp</option>';
+          return;
         }
+        const firstSelectable = dates.find(slot => slot.selectable);
+        select.disabled = !firstSelectable;
+        select.innerHTML = dates.map(slot => {
+          const unavailable = !slot.selectable;
+          const suffix = unavailable ? ' · không đủ chỗ' : '';
+          return `<option value="${slot.date}"${unavailable ? ' disabled' : ''}>${slot.date} · còn ${slot.remaining}/${availability.maxBoxes} hộp${suffix}</option>`;
+        }).join('');
+        const selected = dates.find(slot => slot.selectable && slot.date === previousSelection) || firstSelectable;
+        if (selected) select.value = selected.date;
+      } catch (err) {
+        select.innerHTML = '<option value="">Chưa kiểm tra được sức chứa</option>';
+        handleError(err);
       }
     }
-
-    $('new-order-form').elements.pickupDate.addEventListener('change', showNewOrderCapacity);
 
     document.querySelectorAll('#new-order [name=fulfillment]').forEach(el => el.addEventListener('change', () => {
       const isDelivery = $('new-order-form').elements.fulfillment.value === 'delivery';
