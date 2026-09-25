@@ -43,6 +43,7 @@ export default {
       }
       const fn = ACTIONS[action];
       if (!fn) throw new Error('Action không hợp lệ: ' + action);
+      if (RATE_LIMITED_ACTIONS.has(action)) await checkRateLimit(env, request, action);
       const data = await fn(body || {}, { env, request });
       return jsonRes({ ok: true, data }, cors);
     } catch (err) {
@@ -89,6 +90,34 @@ const ACTIONS = {
   adminUpdateRow:     (b, ctx) => adminUpdateRow(b, ctx),
   adminDeleteRow:     (b, ctx) => adminDeleteRow(b, ctx)
 };
+
+// ===================== CHỐNG SPAM =====================
+// Các action tốn tài nguyên (ghi D1, có thể bị spam) — giới hạn theo IP để tránh bị
+// một nguồn spam làm cạn quota D1/Workers free trong ngày (không tốn phí, nhưng web
+// sẽ ngưng hoạt động cho tới 00:00 UTC nếu quota cạn).
+const RATE_LIMITED_ACTIONS = new Set([
+  'register', 'login', 'createOrder', 'cancelOrder', 'uploadPaymentProof', 'createRedemption'
+]);
+const RATE_LIMIT_MAX = 30;      // tối đa 30 lần/loại action/IP
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // trong 10 phút
+
+async function checkRateLimit(env, request, action) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const bucket = action + ':' + ip;
+  const now = Date.now();
+  const row = await env.DB.prepare('SELECT count, window_start FROM rate_limits WHERE bucket = ?').bind(bucket).first();
+  if (row && now - new Date(row.window_start).getTime() < RATE_LIMIT_WINDOW_MS) {
+    if (row.count >= RATE_LIMIT_MAX) {
+      throw new Error('Bạn thao tác quá nhanh, vui lòng thử lại sau vài phút.');
+    }
+    await env.DB.prepare('UPDATE rate_limits SET count = count + 1 WHERE bucket = ?').bind(bucket).run();
+  } else {
+    await env.DB.prepare(
+      'INSERT INTO rate_limits (bucket, count, window_start) VALUES (?,1,?) ' +
+      'ON CONFLICT(bucket) DO UPDATE SET count = 1, window_start = excluded.window_start'
+    ).bind(bucket, new Date(now).toISOString()).run();
+  }
+}
 
 // ===================== CẤU HÌNH =====================
 const DEFAULTS = {

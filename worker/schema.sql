@@ -93,6 +93,15 @@ CREATE TABLE IF NOT EXISTS login_attempts (
   locked_until TEXT
 );
 
+-- Chống spam: đếm số lần gọi các action tốn tài nguyên (đăng ký, đăng nhập, đặt đơn...)
+-- theo từng IP trong 1 cửa sổ thời gian, để không bị 1 nguồn spam làm cạn quota D1/Workers
+-- free trong ngày. bucket = "<action>:<ip>".
+CREATE TABLE IF NOT EXISTS rate_limits (
+  bucket TEXT PRIMARY KEY,
+  count INTEGER NOT NULL DEFAULT 0,
+  window_start TEXT NOT NULL
+);
+
 -- 4 món mẫu, chỉ chèn khi Menu chưa có món THẬT nào (chưa từng sửa qua admin).
 -- Chạy file này lại lần sau (vd sau khi thêm bảng mới) sẽ KHÔNG tái chèn món mẫu
 -- một khi Menu đã có món thật — sửa/xoá/thêm món thật qua trang admin.
