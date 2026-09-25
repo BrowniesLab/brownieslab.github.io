@@ -393,16 +393,21 @@ function cancelOrder_(token, orderId) {
 
 function isPaidStatus_(status) { return /đã thanh toán|paid/i.test(String(status || '')); }
 
+/**
+ * Cộng điểm ngay nếu khách đã có tài khoản. Nếu chưa (chỉ mới đặt qua SĐT, chưa đăng ký),
+ * không báo lỗi — điểm vẫn neo theo SĐT (PointsEarned trên đơn, PointsCredited=false) và sẽ
+ * tự cộng vào tài khoản ngay khi họ đăng ký (xem register_()).
+ */
 function creditPointsForOrder_(orders, row, order) {
-  if (isTrue_(order.PointsCredited)) return { credited: false, points: null };
+  if (isTrue_(order.PointsCredited)) return { credited: false, points: null, accountExists: true };
   var user = findRow_(table_('Users'), 'Phone', normPhone_(order.Phone), normPhone_);
-  if (!user) throw new Error('Không tìm thấy khách hàng để cộng điểm.');
+  if (!user) return { credited: false, points: null, accountExists: false };
   var users = table_('Users');
   var pointsCol = users.headers.indexOf('Points') + 1;
   var newPoints = (Number(user.obj.Points) || 0) + (Number(order.PointsEarned) || 0);
   users.sheet.getRange(user.row, pointsCol).setValue(newPoints);
   writeCell_(orders.sheet.getRange(row, orders.headers.indexOf('PointsCredited') + 1), 'PointsCredited', true);
-  return { credited: true, points: newPoints };
+  return { credited: true, points: newPoints, accountExists: true };
 }
 
 function adminConfirmPayment_(token, rowIndex, matchKey) {
@@ -426,7 +431,7 @@ function adminConfirmPayment_(token, rowIndex, matchKey) {
     writeCell_(orders.sheet.getRange(row, orders.headers.indexOf('PaymentStatus') + 1), 'PaymentStatus', 'Đã thanh toán');
   }
   var credited = creditPointsForOrder_(orders, row, order);
-  return { orderId: String(order.OrderID), points: credited.points, credited: credited.credited };
+  return { orderId: String(order.OrderID), points: credited.points, credited: credited.credited, accountExists: credited.accountExists };
 }
 
 function paymentInfo_(token, orderId) {

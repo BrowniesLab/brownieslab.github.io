@@ -246,12 +246,17 @@
     async function confirmPaymentForRow(rowIndex, button) {
       const row = table.rows.find(r => r.rowIndex === rowIndex);
       const points = orderValue(row, 'PointsEarned');
-      if (!row || !confirm(`Xác nhận khách đã thanh toán đơn này? Hệ thống sẽ cộng +${points} điểm đúng một lần.`)) return;
+      if (!row || !confirm(`Xác nhận khách đã thanh toán đơn này?`)) return;
       try {
         const r = await withBusy(button, () => api('adminConfirmPayment', {
           rowIndex, matchKey: cellText(row.values[0])
         }), 'Đang xác nhận…');
-        toast(r.credited ? `Đã xác nhận thanh toán và cộng +${points} điểm.` : 'Đơn này đã được cộng điểm trước đó.', 'success');
+        const msg = r.credited
+          ? `Đã xác nhận thanh toán và cộng +${points} điểm.`
+          : r.accountExists === false
+            ? `Đã xác nhận thanh toán. Khách chưa có tài khoản — +${points} điểm sẽ tự cộng khi khách đăng ký web bằng đúng SĐT này.`
+            : 'Đơn này đã được cộng điểm trước đó.';
+        toast(msg, 'success');
         $('editor').close(); load();
       } catch (err) { handleError(err); }
     }

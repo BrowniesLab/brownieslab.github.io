@@ -694,16 +694,22 @@ async function adminConfirmPayment(b, ctx) {
     await ctx.env.DB.prepare("UPDATE orders SET payment_status = 'Đã thanh toán' WHERE id = ?").bind(row.id).run();
   }
 
-  let credited = false, points = null;
+  // Cộng điểm ngay nếu khách đã có tài khoản. Nếu chưa (chỉ mới đặt qua SĐT, chưa đăng ký),
+  // không báo lỗi — điểm vẫn neo theo SĐT (points_earned trên đơn, points_credited=0) và sẽ
+  // tự cộng vào tài khoản ngay khi họ đăng ký (xem register()).
+  let credited = false, points = null, accountExists = true;
   if (!row.points_credited) {
     const user = await ctx.env.DB.prepare('SELECT * FROM users WHERE phone = ?').bind(row.phone).first();
-    if (!user) throw new Error('Không tìm thấy khách hàng để cộng điểm.');
-    points = (Number(user.points) || 0) + (Number(row.points_earned) || 0);
-    await ctx.env.DB.prepare('UPDATE users SET points = ? WHERE phone = ?').bind(points, row.phone).run();
-    await ctx.env.DB.prepare('UPDATE orders SET points_credited = 1 WHERE id = ?').bind(row.id).run();
-    credited = true;
+    if (!user) {
+      accountExists = false;
+    } else {
+      points = (Number(user.points) || 0) + (Number(row.points_earned) || 0);
+      await ctx.env.DB.prepare('UPDATE users SET points = ? WHERE phone = ?').bind(points, row.phone).run();
+      await ctx.env.DB.prepare('UPDATE orders SET points_credited = 1 WHERE id = ?').bind(row.id).run();
+      credited = true;
+    }
   }
-  return { orderId: row.order_id, points, credited };
+  return { orderId: row.order_id, points, credited, accountExists };
 }
 
 // ===================== NGÀY GIỜ =====================
