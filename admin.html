@@ -422,40 +422,34 @@
       const qty = (newOrderQty.get(id) || 0) + (btn.dataset.act === 'inc' ? 1 : -1);
       if (qty <= 0) newOrderQty.delete(id); else newOrderQty.set(id, Math.min(qty, 99));
       btn.closest('.stepper').querySelector('output').textContent = newOrderQty.get(id) || 0;
-      renderNewOrderDates();
     });
 
     /** Đúng danh sách ngày + số hộp còn lại như checkout.html — tránh đơn nhập tay chọn
      * ngày/định dạng mà backend không chấp nhận (buildCheckout chỉ nhận đúng ngày đang mở). */
     async function renderNewOrderDates() {
       const select = $('new-order-form').elements.pickupDate;
-      const boxCount = [...newOrderQty.values()].reduce((sum, qty) => sum + qty, 0);
-      if (!boxCount) {
-        select.innerHTML = '<option value="">Chọn món trước để xem ngày còn chỗ</option>';
-        select.disabled = true;
-        return;
-      }
       const previousSelection = select.value;
       select.disabled = true;
-      select.innerHTML = '<option>Đang kiểm tra chỗ trống…</option>';
+      select.innerHTML = '<option>Đang tải danh sách ngày…</option>';
       try {
-        const availability = await api('pickupAvailability', { boxCount });
+        // Lấy đúng danh sách ngày công khai trên web (boxCount:1 chỉ để lấy danh sách,
+        // không dùng để giới hạn — đơn admin không tính vào quota 30 hộp/đợt).
+        const availability = await api('pickupAvailability', { boxCount: 1 });
         const dates = availability.dates || [];
         if (!dates.length) {
-          select.innerHTML = '<option value="">Các đợt gần nhất đã đủ hộp</option>';
+          select.innerHTML = '<option value="">Chưa có ngày nào đang mở</option>';
           return;
         }
-        const firstSelectable = dates.find(slot => slot.selectable);
-        select.disabled = !firstSelectable;
+        select.disabled = false;
         select.innerHTML = dates.map(slot => {
-          const unavailable = !slot.selectable;
-          const suffix = unavailable ? ' · không đủ chỗ' : '';
-          return `<option value="${slot.date}"${unavailable ? ' disabled' : ''}>${slot.date} · còn ${slot.remaining}/${availability.maxBoxes} hộp${suffix}</option>`;
+          const full = !slot.selectable;
+          const note = full ? ' · đã hết suất công khai, vẫn tạo được cho đơn nhập tay' : '';
+          return `<option value="${slot.date}">${slot.date} · còn ${slot.remaining}/${availability.maxBoxes} hộp (web)${note}</option>`;
         }).join('');
-        const selected = dates.find(slot => slot.selectable && slot.date === previousSelection) || firstSelectable;
+        const selected = dates.find(slot => slot.date === previousSelection) || dates[0];
         if (selected) select.value = selected.date;
       } catch (err) {
-        select.innerHTML = '<option value="">Chưa kiểm tra được sức chứa</option>';
+        select.innerHTML = '<option value="">Chưa tải được danh sách ngày</option>';
         handleError(err);
       }
     }
