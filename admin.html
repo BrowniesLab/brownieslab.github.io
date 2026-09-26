@@ -140,6 +140,36 @@
       return 'don_hang';
     }
 
+    // SocialLink nằm ở bảng Users, không phải Orders — tra theo SĐT, cache lại 1 lần/phiên
+    // để mở nhiều đơn không gọi lại API.
+    let usersSocialLinkCache = null;
+    async function getSocialLinkByPhone(phone) {
+      if (!usersSocialLinkCache) {
+        const data = await api('adminListSheet', { sheet: 'Users' });
+        const phoneIdx = data.headers.indexOf('Phone');
+        const socialIdx = data.headers.indexOf('SocialLink');
+        usersSocialLinkCache = new Map();
+        if (phoneIdx >= 0 && socialIdx >= 0) {
+          data.rows.forEach(r => usersSocialLinkCache.set(cellText(r.values[phoneIdx]), cellText(r.values[socialIdx])));
+        }
+      }
+      return usersSocialLinkCache.get(phone) || '';
+    }
+
+    async function renderOrderSocialLink(phone) {
+      const el = $('editor-social-link');
+      if (!el) return;
+      try {
+        const link = await getSocialLinkByPhone(phone);
+        if (!$('editor-social-link')) return; // đã đóng dialog trước khi tải xong
+        $('editor-social-link').innerHTML = link
+          ? `· <a class="btn btn-sm" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">Instagram khách ↗</a>`
+          : '· <span class="muted">Khách chưa để link Instagram</span>';
+      } catch (err) {
+        if ($('editor-social-link')) $('editor-social-link').innerHTML = '· <span class="muted">Không tải được Instagram</span>';
+      }
+    }
+
     $('sheet-tabs').innerHTML = SHEETS.map(s =>
       `<button class="tab" role="tab" data-sheet="${s}" aria-selected="${s===current}">${LABELS[s]}</button>`
     ).join('');
@@ -456,7 +486,7 @@
         ? (current === 'Orders' ? `Chi tiết đơn · ${orderValue(row, 'CustomerName') || 'Khách hàng'}` : `Sửa dòng ${row.rowIndex} · ${LABELS[current]}`)
         : `Thêm dòng · ${LABELS[current]}`;
       $('editor-delete').hidden = !row || current === 'Redemptions' || current === 'Orders';
-      const orderDetail = current === 'Orders' && row ? `<div class="order-detail"><p><strong>Khách đặt:</strong> ${escapeHtml(orderValue(row, 'CustomerName'))} · ${escapeHtml(orderValue(row, 'Phone'))}</p><p><strong>Người nhận:</strong> ${escapeHtml(orderValue(row, 'RecipientName'))} · ${escapeHtml(orderValue(row, 'RecipientPhone'))}</p><p><strong>Đơn bánh:</strong> ${escapeHtml(orderItemsText(row))} · <strong>${formatVND(orderValue(row, 'Total'))}</strong></p><p><strong>Nhận hàng:</strong> ${escapeHtml(orderValue(row, 'FulfillmentType'))} · ${escapeHtml(orderValue(row, 'PickupDate'))} · ${escapeHtml(orderValue(row, 'PickupTime'))}</p>${orderValue(row, 'PickupLocation') ? `<p><strong>Điểm nhận:</strong> ${escapeHtml(orderValue(row, 'PickupLocation'))}</p>` : ''}${orderValue(row, 'DeliveryAddress') ? `<p><strong>Địa chỉ giao:</strong> ${escapeHtml(orderValue(row, 'DeliveryAddress'))}</p>` : ''}${orderValue(row, 'RecipientMessage') ? `<p><strong>Lời nhắn người nhận:</strong> ${escapeHtml(orderValue(row, 'RecipientMessage'))}</p>` : ''}${orderValue(row, 'Note') ? `<p><strong>Ghi chú đơn:</strong> ${escapeHtml(orderValue(row, 'Note'))}</p>` : ''}<p><strong>Thanh toán:</strong> ${escapeHtml(orderValue(row, 'PaymentMethod'))} · ${escapeHtml(orderValue(row, 'PaymentStatus'))} · ${/^true$/i.test(orderValue(row, 'PointsCredited')) ? 'Đã cộng điểm' : 'Chưa cộng điểm'}</p>${orderValue(row, 'PaymentProofUrl') ? `<p><a class="grid-link" href="${escapeHtml(orderValue(row, 'PaymentProofUrl'))}" target="_blank" rel="noopener noreferrer">Xem ảnh chuyển khoản</a></p>` : ''}${computeOrderStage(row) === 'xac_nhan_tt' ? `<button class="btn btn-primary btn-sm" type="button" data-confirm-payment="${row.rowIndex}">Xác nhận thanh toán &amp; cộng điểm</button>` : ''}${computeOrderStage(row) === 'chua_giao' ? `<button class="btn btn-primary btn-sm" type="button" data-mark-delivered="${row.rowIndex}">Xác nhận đã giao</button>` : ''}</div>` : '';
+      const orderDetail = current === 'Orders' && row ? `<div class="order-detail"><p><strong>Khách đặt:</strong> ${escapeHtml(orderValue(row, 'CustomerName'))} · ${escapeHtml(orderValue(row, 'Phone'))} <span id="editor-social-link">· <span class="muted">Đang tải Instagram…</span></span></p><p><strong>Người nhận:</strong> ${escapeHtml(orderValue(row, 'RecipientName'))} · ${escapeHtml(orderValue(row, 'RecipientPhone'))}</p><p><strong>Đơn bánh:</strong> ${escapeHtml(orderItemsText(row))} · <strong>${formatVND(orderValue(row, 'Total'))}</strong></p><p><strong>Nhận hàng:</strong> ${escapeHtml(orderValue(row, 'FulfillmentType'))} · ${escapeHtml(orderValue(row, 'PickupDate'))} · ${escapeHtml(orderValue(row, 'PickupTime'))}</p>${orderValue(row, 'PickupLocation') ? `<p><strong>Điểm nhận:</strong> ${escapeHtml(orderValue(row, 'PickupLocation'))}</p>` : ''}${orderValue(row, 'DeliveryAddress') ? `<p><strong>Địa chỉ giao:</strong> ${escapeHtml(orderValue(row, 'DeliveryAddress'))}</p>` : ''}${orderValue(row, 'RecipientMessage') ? `<p><strong>Lời nhắn người nhận:</strong> ${escapeHtml(orderValue(row, 'RecipientMessage'))}</p>` : ''}${orderValue(row, 'Note') ? `<p><strong>Ghi chú đơn:</strong> ${escapeHtml(orderValue(row, 'Note'))}</p>` : ''}<p><strong>Thanh toán:</strong> ${escapeHtml(orderValue(row, 'PaymentMethod'))} · ${escapeHtml(orderValue(row, 'PaymentStatus'))} · ${/^true$/i.test(orderValue(row, 'PointsCredited')) ? 'Đã cộng điểm' : 'Chưa cộng điểm'}</p>${orderValue(row, 'PaymentProofUrl') ? `<p><a class="grid-link" href="${escapeHtml(orderValue(row, 'PaymentProofUrl'))}" target="_blank" rel="noopener noreferrer">Xem ảnh chuyển khoản</a></p>` : ''}${computeOrderStage(row) === 'xac_nhan_tt' ? `<button class="btn btn-primary btn-sm" type="button" data-confirm-payment="${row.rowIndex}">Xác nhận thanh toán &amp; cộng điểm</button>` : ''}${computeOrderStage(row) === 'chua_giao' ? `<button class="btn btn-primary btn-sm" type="button" data-mark-delivered="${row.rowIndex}">Xác nhận đã giao</button>` : ''}</div>` : '';
       $('editor-fields').innerHTML = orderDetail + table.headers.map((h,i) => {
         if (!h) return '';
         if ((current === 'Orders' || current === 'Redemptions') && row && h !== 'Status') return '';
@@ -473,6 +503,7 @@
           `<button class="btn btn-danger btn-sm" type="button" data-cancel-order="${row.rowIndex}">Hủy đơn</button>`
         );
       }
+      if (current === 'Orders' && row) renderOrderSocialLink(orderValue(row, 'Phone'));
       $('editor-hint').textContent = current === 'Users'
         ? 'Mẹo: nhập PIN mới 4–6 số vào ô PinHash để đặt lại PIN. Đúng/sai nhập TRUE/FALSE.'
         : current === 'Orders' ? 'Chỉ sửa trạng thái đơn tại đây. Thanh toán và điểm được xác nhận bằng nút “Xác nhận TT & cộng điểm” ở thẻ đơn.'
