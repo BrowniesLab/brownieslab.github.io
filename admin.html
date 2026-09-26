@@ -21,6 +21,11 @@
     <div class="tabs" role="tablist" id="sheet-tabs"></div>
     <div class="tabs" role="tablist" id="order-stage-tabs" hidden></div>
 
+    <section class="production-summary" id="production-summary" hidden>
+      <div class="production-summary-heading"><div><p class="eyebrow">CHUẨN BỊ BÁNH</p><h2>Tổng hợp làm bánh</h2></div><p class="small muted">Tính toàn bộ đơn chưa huỷ, gồm cả đơn nhập tay.</p></div>
+      <div class="production-batches" id="production-batches"></div>
+    </section>
+
     <div class="toolbar">
       <label class="field">
         <span class="sr-title">Tìm trong bảng</span>
@@ -209,6 +214,60 @@
 
     function orderItemsText(row) { return orderItemsTextFromValue(orderValue(row, 'ItemsJSON')); }
 
+    function pickupDateTimestamp(label) {
+      const match = String(label || '').match(/\((\d{2})\/(\d{2})\)/);
+      if (!match) return Number.MAX_SAFE_INTEGER;
+      const today = new Date();
+      let year = today.getFullYear();
+      let date = new Date(year, Number(match[2]) - 1, Number(match[1]));
+      if (date.getTime() < new Date(year, today.getMonth(), today.getDate() - 7).getTime()) {
+        date = new Date(year + 1, Number(match[2]) - 1, Number(match[1]));
+      }
+      return date.getTime();
+    }
+
+    function renderProductionSummary() {
+      const section = $('production-summary');
+      section.hidden = current !== 'Orders';
+      if (current !== 'Orders') return;
+
+      const batches = new Map();
+      const activeOrders = { customer: 0, manual: 0 };
+      table.rows.forEach(row => {
+        if (isCancelledText(orderValue(row, 'Status')) || isCancelledText(orderValue(row, 'PaymentStatus'))) return;
+        const source = /-A[A-Z0-9]+$/i.test(orderValue(row, 'OrderID')) ? 'manual' : 'customer';
+        activeOrders[source]++;
+        const pickupDate = orderValue(row, 'PickupDate') || 'Chưa chọn ngày nhận';
+        if (!batches.has(pickupDate)) {
+          batches.set(pickupDate, { pickupDate, total: 0, customer: 0, manual: 0, items: new Map() });
+        }
+        let items = [];
+        try { items = JSON.parse(orderValue(row, 'ItemsJSON') || '[]'); } catch (e) { return; }
+        const batch = batches.get(pickupDate);
+        items.forEach(item => {
+          const qty = Number(item && item.qty) || 0;
+          if (qty <= 0) return;
+          const key = String(item.itemId || item.name || 'Bánh');
+          const currentItem = batch.items.get(key) || {
+            name: String(item.name || item.itemId || 'Bánh'), total: 0, customer: 0, manual: 0
+          };
+          currentItem.total += qty;
+          currentItem[source] += qty;
+          batch.items.set(key, currentItem);
+          batch.total += qty;
+          batch[source] += qty;
+        });
+      });
+
+      const batchesHtml = [...batches.values()]
+        .sort((a, b) => pickupDateTimestamp(a.pickupDate) - pickupDateTimestamp(b.pickupDate))
+        .map(batch => `<article class="production-batch"><h3>${escapeHtml(batch.pickupDate)}</h3><dl>${[...batch.items.values()].map(item => `<div><dt>${escapeHtml(item.name)}</dt><dd>${item.total} hộp<small>Khách đặt: ${item.customer} · Nhập tay: ${item.manual}</small></dd></div>`).join('') || '<div><dt>Chưa có món</dt><dd>—</dd></div>'}</dl><p>Tổng <strong>${batch.total} hộp</strong><small>Khách đặt: ${batch.customer} · Nhập tay: ${batch.manual}</small></p></article>`)
+        .join('');
+      $('production-batches').innerHTML = batchesHtml || '<p class="empty">Chưa có đơn chưa huỷ để tổng hợp.</p>';
+      const totalOrders = activeOrders.customer + activeOrders.manual;
+      section.querySelector('.small').textContent = `${totalOrders} đơn chưa huỷ · Khách đặt: ${activeOrders.customer} · Nhập tay: ${activeOrders.manual} · Đơn đã huỷ không tính.`;
+    }
+
     function fieldLabel(header) {
       const labels = {
         Status: 'Trạng thái đơn', Note: 'Ghi chú đơn', Phone: 'Số điện thoại',
@@ -250,6 +309,7 @@
     }
 
     function render() {
+      renderProductionSummary();
       if (current === 'Orders') {
         document.querySelectorAll('#order-stage-tabs [data-stage]').forEach(t =>
           t.setAttribute('aria-selected', String(t.dataset.stage === orderStage)));

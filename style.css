@@ -554,3 +554,20 @@ dialog textarea { min-height: 6rem; font-family: ui-monospace, Menlo, monospace;
   *, *::before, *::after { animation: none !important; transition-duration: .01ms !important; }
 }
 .sr-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ── TỔNG HỢP LÀM BÁNH (ADMIN) ─────────────────────── */
+.production-summary { margin: 0 0 1.25rem; padding: 1rem; background: var(--paper); border: 1.5px solid var(--div); border-radius: var(--r-lg); box-shadow: var(--sh-sm); }
+.production-summary-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; margin-bottom: .85rem; }
+.production-summary .eyebrow { margin: 0 0 .18rem; font-size: .68rem; letter-spacing: .12em; font-weight: 800; color: var(--accent); }
+.production-summary h2 { margin: 0; font-size: 1.25rem; }
+.production-summary-heading .small { margin: .2rem 0 0; text-align: right; }
+.production-batches { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .7rem; }
+.production-batch { padding: .85rem; border-radius: var(--r); background: var(--card); border: 1px solid var(--div); }
+.production-batch h3 { margin: 0 0 .55rem; font-size: 1rem; }
+.production-batch dl { margin: 0; }
+.production-batch dl div { display: flex; justify-content: space-between; gap: .75rem; padding: .22rem 0; }
+.production-batch dt { color: var(--muted); }
+.production-batch dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.production-batch dd small,.production-batch p small { display: block; margin-top: .12rem; color: var(--muted); font-size: .72rem; font-weight: 500; }
+.production-batch p { margin: .65rem 0 0; padding-top: .55rem; border-top: 1px solid var(--div); }
+@media (max-width: 32rem) { .production-summary-heading { display: block; } .production-summary-heading .small { text-align: left; } }
