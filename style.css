@@ -563,6 +563,7 @@ dialog textarea { min-height: 6rem; font-family: ui-monospace, Menlo, monospace;
 .production-summary-heading .small { margin: .2rem 0 0; text-align: right; }
 .production-batches { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .7rem; }
 .production-batch { padding: .85rem; border-radius: var(--r); background: var(--card); border: 1px solid var(--div); }
+.redemption-batch { background: #fff3df; }
 .production-batch h3 { margin: 0 0 .55rem; font-size: 1rem; }
 .production-batch dl { margin: 0; }
 .production-batch dl div { display: flex; justify-content: space-between; gap: .75rem; padding: .22rem 0; }

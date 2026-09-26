@@ -110,6 +110,7 @@
 
     let current = SHEETS[0];
     let table   = { headers: [], rows: [] };
+    let redemptionTable = { headers: [], rows: [] };
     let editing = null;
 
     // Pipeline đơn hàng: Thanh toán trước → xác nhận thanh toán → chưa giao → đơn hàng.
@@ -177,7 +178,17 @@
       $('order-stage-tabs').hidden = current !== 'Orders';
       $('grid').innerHTML = '<tbody><tr><td class="loading" style="height:3rem"></td></tr></tbody>';
       try {
-        table = await api('adminListSheet', { sheet: current });
+        if (current === 'Orders') {
+          const [orders, redemptions] = await Promise.all([
+            api('adminListSheet', { sheet: 'Orders' }),
+            api('adminListSheet', { sheet: 'Redemptions' })
+          ]);
+          table = orders;
+          redemptionTable = redemptions;
+        } else {
+          table = await api('adminListSheet', { sheet: current });
+          redemptionTable = { headers: [], rows: [] };
+        }
         render();
       } catch (err) {
         $('grid').innerHTML = '<tbody><tr><td class="empty">Không tải được dữ liệu.</td></tr></tbody>';
@@ -226,6 +237,15 @@
       return { key: formatted, label: `${weekdays[date.getDay()]} (${formatted})`, timestamp: date.getTime() };
     }
 
+    function redemptionValue(row, header) {
+      const i = redemptionTable.headers.indexOf(header);
+      return i < 0 ? '' : cellText(row.values[i]);
+    }
+
+    function shouldCountRedemption(status) {
+      return !/huỷ|hủy|cancel|từ chối|đã giao|hoàn thành|done/i.test(String(status || ''));
+    }
+
     function renderProductionSummary() {
       const section = $('production-summary');
       section.hidden = current !== 'Orders';
@@ -265,17 +285,33 @@
         });
       });
 
-      const batchesHtml = [...batches.values()]
+      const redemptionItems = new Map();
+      let redemptionRequests = 0, redemptionBoxes = 0;
+      redemptionTable.rows.forEach(row => {
+        if (!shouldCountRedemption(redemptionValue(row, 'Status'))) return;
+        const qty = Number(redemptionValue(row, 'Quantity')) || 0;
+        if (qty <= 0) return;
+        const key = redemptionValue(row, 'ItemID') || redemptionValue(row, 'ItemName') || 'Bánh đổi điểm';
+        const item = redemptionItems.get(key) || { name: redemptionValue(row, 'ItemName') || key, qty: 0 };
+        item.qty += qty;
+        redemptionItems.set(key, item);
+        redemptionRequests++;
+        redemptionBoxes += qty;
+      });
+
+      const orderBatchesHtml = [...batches.values()]
         .sort((a, b) => a.timestamp - b.timestamp)
         .map(batch => `<article class="production-batch"><h3>${escapeHtml(batch.label)}</h3><dl>${[...batch.items.values()].map(item => `<div><dt>${escapeHtml(item.name)}</dt><dd>${item.total} hộp<small>Khách đặt: ${item.customer} · Nhập tay: ${item.manual}</small></dd></div>`).join('') || '<div><dt>Chưa có món</dt><dd>—</dd></div>'}</dl><p>Tổng <strong>${batch.total} hộp</strong><small>Khách đặt: ${batch.customer} · Nhập tay: ${batch.manual}</small></p></article>`)
         .join('');
-      $('production-batches').innerHTML = batchesHtml || '<p class="empty">Chưa có đợt giao hôm nay hoặc sắp tới.</p>';
+      const redemptionHtml = redemptionBoxes ? `<article class="production-batch redemption-batch"><h3>Đổi điểm · chờ xếp ngày giao</h3><dl>${[...redemptionItems.values()].map(item => `<div><dt>${escapeHtml(item.name)}</dt><dd>${item.qty} hộp<small>Đổi điểm</small></dd></div>`).join('')}</dl><p>Tổng <strong>${redemptionBoxes} hộp</strong><small>${redemptionRequests} yêu cầu đổi điểm</small></p></article>` : '';
+      $('production-batches').innerHTML = orderBatchesHtml + redemptionHtml || '<p class="empty">Chưa có đợt giao hôm nay hoặc sắp tới.</p>';
       const totalOrders = activeOrders.customer + activeOrders.manual;
       const hiddenNote = [
         hiddenOrders.past ? `${hiddenOrders.past} đơn ngày đã qua đã ẩn` : '',
         hiddenOrders.missingDate ? `${hiddenOrders.missingDate} đơn thiếu ngày cần bổ sung` : ''
       ].filter(Boolean).join(' · ');
-      section.querySelector('.small').textContent = `${totalOrders} đơn hôm nay/sắp giao · Khách đặt: ${activeOrders.customer} · Nhập tay: ${activeOrders.manual}${hiddenNote ? ` · ${hiddenNote}` : ''}.`;
+      const redemptionNote = redemptionRequests ? ` · Đổi điểm: ${redemptionRequests} yêu cầu / ${redemptionBoxes} hộp chờ xếp ngày` : '';
+      section.querySelector('.small').textContent = `${totalOrders} đơn hôm nay/sắp giao · Khách đặt: ${activeOrders.customer} · Nhập tay: ${activeOrders.manual}${redemptionNote}${hiddenNote ? ` · ${hiddenNote}` : ''}.`;
     }
 
     function fieldLabel(header) {
