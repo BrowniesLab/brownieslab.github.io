@@ -214,16 +214,16 @@
 
     function orderItemsText(row) { return orderItemsTextFromValue(orderValue(row, 'ItemsJSON')); }
 
-    function pickupDateTimestamp(label) {
-      const match = String(label || '').match(/\((\d{2})\/(\d{2})\)/);
-      if (!match) return Number.MAX_SAFE_INTEGER;
+    function pickupDateInfo(label) {
+      const match = String(label || '').match(/(\d{1,2})\/(\d{1,2})/);
+      if (!match) return null;
+      const day = Number(match[1]), month = Number(match[2]);
       const today = new Date();
-      let year = today.getFullYear();
-      let date = new Date(year, Number(match[2]) - 1, Number(match[1]));
-      if (date.getTime() < new Date(year, today.getMonth(), today.getDate() - 7).getTime()) {
-        date = new Date(year + 1, Number(match[2]) - 1, Number(match[1]));
-      }
-      return date.getTime();
+      const date = new Date(today.getFullYear(), month - 1, day);
+      if (date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+      const formatted = `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}`;
+      const weekdays = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+      return { key: formatted, label: `${weekdays[date.getDay()]} (${formatted})`, timestamp: date.getTime() };
     }
 
     function renderProductionSummary() {
@@ -233,17 +233,23 @@
 
       const batches = new Map();
       const activeOrders = { customer: 0, manual: 0 };
+      const hiddenOrders = { past: 0, missingDate: 0 };
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
       table.rows.forEach(row => {
         if (isCancelledText(orderValue(row, 'Status')) || isCancelledText(orderValue(row, 'PaymentStatus'))) return;
+        const dateInfo = pickupDateInfo(orderValue(row, 'PickupDate'));
+        if (!dateInfo) { hiddenOrders.missingDate++; return; }
+        if (dateInfo.timestamp < startOfToday.getTime()) { hiddenOrders.past++; return; }
+
         const source = /-A[A-Z0-9]+$/i.test(orderValue(row, 'OrderID')) ? 'manual' : 'customer';
         activeOrders[source]++;
-        const pickupDate = orderValue(row, 'PickupDate') || 'Chưa chọn ngày nhận';
-        if (!batches.has(pickupDate)) {
-          batches.set(pickupDate, { pickupDate, total: 0, customer: 0, manual: 0, items: new Map() });
+        if (!batches.has(dateInfo.key)) {
+          batches.set(dateInfo.key, { ...dateInfo, total: 0, customer: 0, manual: 0, items: new Map() });
         }
         let items = [];
         try { items = JSON.parse(orderValue(row, 'ItemsJSON') || '[]'); } catch (e) { return; }
-        const batch = batches.get(pickupDate);
+        const batch = batches.get(dateInfo.key);
         items.forEach(item => {
           const qty = Number(item && item.qty) || 0;
           if (qty <= 0) return;
@@ -260,12 +266,16 @@
       });
 
       const batchesHtml = [...batches.values()]
-        .sort((a, b) => pickupDateTimestamp(a.pickupDate) - pickupDateTimestamp(b.pickupDate))
-        .map(batch => `<article class="production-batch"><h3>${escapeHtml(batch.pickupDate)}</h3><dl>${[...batch.items.values()].map(item => `<div><dt>${escapeHtml(item.name)}</dt><dd>${item.total} hộp<small>Khách đặt: ${item.customer} · Nhập tay: ${item.manual}</small></dd></div>`).join('') || '<div><dt>Chưa có món</dt><dd>—</dd></div>'}</dl><p>Tổng <strong>${batch.total} hộp</strong><small>Khách đặt: ${batch.customer} · Nhập tay: ${batch.manual}</small></p></article>`)
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .map(batch => `<article class="production-batch"><h3>${escapeHtml(batch.label)}</h3><dl>${[...batch.items.values()].map(item => `<div><dt>${escapeHtml(item.name)}</dt><dd>${item.total} hộp<small>Khách đặt: ${item.customer} · Nhập tay: ${item.manual}</small></dd></div>`).join('') || '<div><dt>Chưa có món</dt><dd>—</dd></div>'}</dl><p>Tổng <strong>${batch.total} hộp</strong><small>Khách đặt: ${batch.customer} · Nhập tay: ${batch.manual}</small></p></article>`)
         .join('');
-      $('production-batches').innerHTML = batchesHtml || '<p class="empty">Chưa có đơn chưa huỷ để tổng hợp.</p>';
+      $('production-batches').innerHTML = batchesHtml || '<p class="empty">Chưa có đợt giao hôm nay hoặc sắp tới.</p>';
       const totalOrders = activeOrders.customer + activeOrders.manual;
-      section.querySelector('.small').textContent = `${totalOrders} đơn chưa huỷ · Khách đặt: ${activeOrders.customer} · Nhập tay: ${activeOrders.manual} · Đơn đã huỷ không tính.`;
+      const hiddenNote = [
+        hiddenOrders.past ? `${hiddenOrders.past} đơn ngày đã qua đã ẩn` : '',
+        hiddenOrders.missingDate ? `${hiddenOrders.missingDate} đơn thiếu ngày cần bổ sung` : ''
+      ].filter(Boolean).join(' · ');
+      section.querySelector('.small').textContent = `${totalOrders} đơn hôm nay/sắp giao · Khách đặt: ${activeOrders.customer} · Nhập tay: ${activeOrders.manual}${hiddenNote ? ` · ${hiddenNote}` : ''}.`;
     }
 
     function fieldLabel(header) {
