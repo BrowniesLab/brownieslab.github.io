@@ -302,6 +302,13 @@
       return method === 'Thanh toán khi nhận hàng';
     }
 
+    function canAdminCancelOrder(row) {
+      const status = orderValue(row, 'Status');
+      const paymentStatus = orderValue(row, 'PaymentStatus');
+      return !isCancelledText(status) && !isCancelledText(paymentStatus) &&
+        !isPaidText(paymentStatus) && !isDeliveredText(status);
+    }
+
     function renderOrderRefs(rows) {
       const body = rows.length ? rows.map(r => {
         const proof = orderValue(r, 'PaymentProofUrl');
@@ -312,7 +319,7 @@
             <span class="order-ref-items">${escapeHtml(orderItemsText(r))}</span>
             <span class="order-ref-total">${formatVND(orderValue(r, 'Total'))} · ${/^true$/i.test(orderValue(r, 'PointsCredited')) ? 'Đã cộng' : 'Chờ cộng'} +${escapeHtml(orderValue(r, 'PointsEarned'))} điểm</span>
           </button>
-          <span class="order-ref-actions"><span class="status payment">${escapeHtml(orderValue(r, 'PaymentMethod') || 'Chưa chọn')} · ${escapeHtml(orderValue(r, 'PaymentStatus') || 'Chưa thanh toán')}</span>${proof ? `<a class="btn btn-sm" href="${escapeHtml(proof)}" target="_blank" rel="noopener noreferrer">Xem ảnh</a>` : ''}${orderStage === 'xac_nhan_tt' ? `<button class="btn btn-sm btn-dark" type="button" data-confirm-payment="${r.rowIndex}">Xác nhận TT &amp; cộng điểm</button>` : ''}${orderStage === 'chua_giao' ? `<button class="btn btn-sm btn-dark" type="button" data-mark-delivered="${r.rowIndex}">Xác nhận đã giao</button>` : ''}</span>
+          <span class="order-ref-actions"><span class="status payment">${escapeHtml(orderValue(r, 'PaymentMethod') || 'Chưa chọn')} · ${escapeHtml(orderValue(r, 'PaymentStatus') || 'Chưa thanh toán')}</span>${proof ? `<a class="btn btn-sm" href="${escapeHtml(proof)}" target="_blank" rel="noopener noreferrer">Xem ảnh</a>` : ''}${orderStage === 'xac_nhan_tt' ? `<button class="btn btn-sm btn-dark" type="button" data-confirm-payment="${r.rowIndex}">Xác nhận TT &amp; cộng điểm</button>` : ''}${orderStage === 'chua_giao' ? `<button class="btn btn-sm btn-dark" type="button" data-mark-delivered="${r.rowIndex}">Xác nhận đã giao</button>` : ''}${canAdminCancelOrder(r) ? `<button class="btn btn-danger btn-sm" type="button" data-cancel-order="${r.rowIndex}">Hủy đơn</button>` : ''}</span>
         </td></tr>`;
       }).join('') : `<tr><td class="empty" colspan="2">Không có đơn nào trong mục "${escapeHtml((ORDER_STAGES.find(s => s.key === orderStage) || {}).label || '')}".</td></tr>`;
       $('grid').innerHTML = '<tbody>' + body + '</tbody>';
@@ -349,6 +356,8 @@
       if (confirmPayment) { confirmPaymentForRow(Number(confirmPayment.dataset.confirmPayment), confirmPayment); return; }
       const markDelivered = e.target.closest('[data-mark-delivered]');
       if (markDelivered) { markDeliveredForRow(Number(markDelivered.dataset.markDelivered), markDelivered); return; }
+      const cancelOrder = e.target.closest('[data-cancel-order]');
+      if (cancelOrder) { cancelOrderForAdmin(Number(cancelOrder.dataset.cancelOrder), cancelOrder); return; }
       const tr = e.target.closest('tr[data-row]');
       if (!tr) return;
       openEditor(table.rows.find(r => r.rowIndex === Number(tr.dataset.row)));
@@ -357,6 +366,8 @@
     $('editor-fields').addEventListener('click', (e) => {
       const confirmPayment = e.target.closest('[data-confirm-payment]');
       if (confirmPayment) confirmPaymentForRow(Number(confirmPayment.dataset.confirmPayment), confirmPayment);
+      const cancelOrder = e.target.closest('[data-cancel-order]');
+      if (cancelOrder) cancelOrderForAdmin(Number(cancelOrder.dataset.cancelOrder), cancelOrder);
       const markDelivered = e.target.closest('[data-mark-delivered]');
       if (markDelivered) markDeliveredForRow(Number(markDelivered.dataset.markDelivered), markDelivered);
     });
@@ -391,6 +402,18 @@
       } catch (err) { handleError(err); }
     }
 
+    async function cancelOrderForAdmin(rowIndex, button) {
+      const row = table.rows.find(r => r.rowIndex === rowIndex);
+      if (!row || !confirm('Hủy đơn này? Chỉ đơn chưa thanh toán và chưa giao mới được hủy.')) return;
+      try {
+        const result = await withBusy(button, () => api('adminCancelOrder', {
+          rowIndex, matchKey: cellText(row.values[0])
+        }), 'Đang hủy…');
+        toast(result.releasedCapacity ? 'Đã hủy đơn và hoàn suất giao hàng.' : 'Đã hủy đơn nhập tay.', 'success');
+        $('editor').close(); load();
+      } catch (err) { handleError(err); }
+    }
+
     function openEditor(row) {
       editing = row;
       $('editor-title').textContent = row
@@ -408,6 +431,12 @@
           : `<input name="${escapeHtml(h)}" value="${escapeHtml(v)}">`;
         return `<label class="field"><span>${escapeHtml(fieldLabel(h))}</span>${inp}</label>`;
       }).join('');
+      if (current === 'Orders' && row && canAdminCancelOrder(row)) {
+        $('editor-fields').insertAdjacentHTML(
+          'beforeend',
+          `<button class="btn btn-danger btn-sm" type="button" data-cancel-order="${row.rowIndex}">Hủy đơn</button>`
+        );
+      }
       $('editor-hint').textContent = current === 'Users'
         ? 'Mẹo: nhập PIN mới 4–6 số vào ô PinHash để đặt lại PIN. Đúng/sai nhập TRUE/FALSE.'
         : current === 'Orders' ? 'Chỉ sửa trạng thái đơn tại đây. Thanh toán và điểm được xác nhận bằng nút “Xác nhận TT & cộng điểm” ở thẻ đơn.'

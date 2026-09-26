@@ -91,6 +91,7 @@ const ACTIONS = {
   adminCreateOrder:   (b, ctx) => adminCreateOrder(b, ctx),
   adminListSheet:     (b, ctx) => adminListSheet(b, ctx),
   adminConfirmPayment:(b, ctx) => adminConfirmPayment(b, ctx),
+  adminCancelOrder:   (b, ctx) => adminCancelOrder(b, ctx),
   adminAddRow:        (b, ctx) => adminAddRow(b, ctx),
   adminUpdateRow:     (b, ctx) => adminUpdateRow(b, ctx),
   adminDeleteRow:     (b, ctx) => adminDeleteRow(b, ctx)
@@ -101,7 +102,7 @@ const ACTIONS = {
 // một nguồn spam làm cạn quota D1/Workers free trong ngày (không tốn phí, nhưng web
 // sẽ ngưng hoạt động cho tới 00:00 UTC nếu quota cạn).
 const RATE_LIMITED_ACTIONS = new Set([
-  'register', 'login', 'createOrder', 'cancelOrder', 'uploadPaymentProof', 'createRedemption'
+  'register', 'login', 'createOrder', 'cancelOrder', 'adminCancelOrder', 'uploadPaymentProof', 'createRedemption'
 ]);
 const RATE_LIMIT_MAX = 30;      // tối đa 30 lần/loại action/IP
 
@@ -305,6 +306,8 @@ function canCancelOrder(status, paymentStatus) {
   if (/đã giao|hoàn thành|completed|done/i.test(String(status || ''))) return false;
   return true;
 }
+function isManualAdminOrder(orderId) { return /-A[A-Z0-9]+$/i.test(String(orderId || '')); }
+
 function canPayOrder(status, paymentStatus, paymentMethod) {
   return String(paymentMethod || '') === 'Thanh toán trước' &&
     !isCancelledStatus(status) && !isCancelledStatus(paymentStatus) &&
@@ -557,10 +560,15 @@ async function cancelOrder(b, ctx) {
 
   let boxCount = 0;
   try { boxCount = JSON.parse(order.items_json || '[]').reduce((sum, line) => sum + (Number(line.qty) || 0), 0); } catch (e) {}
-  await ctx.env.DB.batch([
-    ctx.env.DB.prepare("UPDATE orders SET status = 'Đã huỷ', payment_status = 'Đã huỷ' WHERE id = ?").bind(order.id),
-    ctx.env.DB.prepare('UPDATE pickup_batches SET boxes_reserved = MAX(0, boxes_reserved - ?) WHERE pickup_date = ?').bind(boxCount, order.pickup_date)
-  ]);
+  const statements = [
+    ctx.env.DB.prepare("UPDATE orders SET status = 'Đã huỷ', payment_status = 'Đã huỷ' WHERE id = ?").bind(order.id)
+  ];
+  if (!isManualAdminOrder(order.order_id)) {
+    statements.push(ctx.env.DB.prepare(
+      'UPDATE pickup_batches SET boxes_reserved = MAX(0, boxes_reserved - ?) WHERE pickup_date = ?'
+    ).bind(boxCount, order.pickup_date));
+  }
+  await ctx.env.DB.batch(statements);
 
   let newPoints = Number(user.points) || 0;
   if (order.points_credited) {
@@ -568,6 +576,29 @@ async function cancelOrder(b, ctx) {
     await ctx.env.DB.prepare('UPDATE users SET points = ? WHERE phone = ?').bind(newPoints, user.phone).run();
   }
   return { orderId: order.order_id, points: newPoints };
+}
+
+/** Admin chỉ hủy đơn chưa thanh toán và chưa giao, giống điều kiện khách tự hủy. */
+async function adminCancelOrder(b, ctx) {
+  await requireAdmin(ctx.env, b.token);
+  const order = await checkRow(ctx.env, sheetDef('Orders'), b.rowIndex, b.matchKey);
+  if (!canCancelOrder(order.status, order.payment_status)) {
+    throw new Error('Chỉ có thể hủy đơn chưa thanh toán và chưa giao.');
+  }
+
+  let boxCount = 0;
+  try { boxCount = JSON.parse(order.items_json || '[]').reduce((sum, line) => sum + (Number(line.qty) || 0), 0); } catch (e) {}
+  const manual = isManualAdminOrder(order.order_id);
+  const statements = [
+    ctx.env.DB.prepare("UPDATE orders SET status = 'Đã huỷ', payment_status = 'Đã huỷ' WHERE id = ?").bind(order.id)
+  ];
+  if (!manual) {
+    statements.push(ctx.env.DB.prepare(
+      'UPDATE pickup_batches SET boxes_reserved = MAX(0, boxes_reserved - ?) WHERE pickup_date = ?'
+    ).bind(boxCount, order.pickup_date));
+  }
+  await ctx.env.DB.batch(statements);
+  return { orderId: order.order_id, releasedCapacity: !manual };
 }
 
 async function myOrders(b, ctx) {
@@ -806,7 +837,6 @@ async function adminAddRow(b, ctx) {
   const res = await ctx.env.DB.prepare(`INSERT INTO ${def.table} (${cols.join(', ')}) VALUES (${placeholders.join(', ')})`).bind(...vals).run();
   return { rowIndex: res.meta.last_row_id };
 }
-
 async function adminUpdateRow(b, ctx) {
   await requireAdmin(ctx.env, b.token);
   const def = sheetDef(b.sheet);
@@ -816,7 +846,7 @@ async function adminUpdateRow(b, ctx) {
       throw new Error('Không thể sửa món, ngày nhận hoặc thanh toán trực tiếp vì sẽ làm lệch sức chứa/điểm.');
     }
     if (Object.prototype.hasOwnProperty.call(b.data || {}, 'Status') && isCancelledStatus(b.data.Status)) {
-      throw new Error('Không thể huỷ đơn từ admin. Khách cần huỷ trên trang đơn hàng để hệ thống hoàn số hộp.');
+      throw new Error('Dùng nút “Hủy đơn” để hủy an toàn và hoàn suất giao hàng.');
     }
   }
   if (b.sheet === 'Redemptions' && Object.keys(b.data || {}).some(k => k !== 'Status')) {
