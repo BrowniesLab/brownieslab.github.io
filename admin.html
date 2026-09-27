@@ -77,13 +77,14 @@
       <label class="field" id="new-order-delivery-field" hidden><span>Địa chỉ giao bánh</span><input name="deliveryAddress" placeholder="Địa chỉ chi tiết"></label>
 
       <div class="field-grid">
-        <label class="field"><span>Ngày nhận bánh</span><select name="pickupDate" required><option value="">Chọn món trước để xem ngày còn chỗ</option></select></label>
+        <label class="field"><span>Ngày nhận bánh</span><input name="pickupDate" placeholder="Ví dụ: Thứ 6 (25/09)"></label>
         <label class="field"><span>Thời gian nhận bánh</span><select name="pickupTime" required>
           <option value="Sáng (10–11h)">Sáng (10–11h)</option>
           <option value="Trưa (12–13h)">Trưa (12–13h)</option>
           <option value="Chiều (15–16h)">Chiều (15–16h)</option>
         </select></label>
       </div>
+      <p class="small muted" id="new-order-capacity" aria-live="polite">Nhập ngày nhận bánh để xem số hộp còn lại.</p>
 
       <p style="font-weight:700;margin:.9rem 0 .4rem">Thanh toán</p>
       <div class="choice-row" role="radiogroup" aria-label="Phương thức thanh toán">
@@ -551,7 +552,7 @@
       $('new-order-pickup-field').hidden = false;
       $('new-order-delivery-field').hidden = true;
       $('new-order').showModal();
-      renderNewOrderDates();
+      $('new-order-capacity').textContent = 'Nhập ngày nhận bánh để xem số hộp còn lại.';
       if (!newOrderMenu) {
         try { newOrderMenu = await apiGet('getMenu'); }
         catch (err) { $('new-order-items').innerHTML = '<p class="empty">Không tải được menu.</p>'; handleError(err); return; }
@@ -590,35 +591,29 @@
       btn.closest('.stepper').querySelector('output').textContent = newOrderQty.get(id) || 0;
     });
 
-    /** Đúng danh sách ngày + số hộp còn lại như checkout.html — tránh đơn nhập tay chọn
-     * ngày/định dạng mà backend không chấp nhận (buildCheckout chỉ nhận đúng ngày đang mở). */
-    async function renderNewOrderDates() {
-      const select = $('new-order-form').elements.pickupDate;
-      const previousSelection = select.value;
-      select.disabled = true;
-      select.innerHTML = '<option>Đang tải danh sách ngày…</option>';
+    /** Chỉ hiện tham khảo số hộp web đang giữ cho ngày admin gõ — KHÔNG khoá chọn, vì
+     * đơn admin nhập tay cần nhập được cả ngày ngoài lịch công khai (bổ sung đơn sót,
+     * đơn quá khứ...). Backend (buildCheckout skipDateWhitelist) cũng không chặn ngày này. */
+    async function showNewOrderCapacity() {
+      const pickupDate = $('new-order-form').elements.pickupDate.value.trim();
+      const output = $('new-order-capacity');
+      if (!pickupDate) {
+        output.textContent = 'Nhập ngày nhận bánh để xem số hộp còn lại.';
+        return;
+      }
+      output.textContent = 'Đang kiểm tra số hộp còn lại…';
       try {
-        // Lấy đúng danh sách ngày công khai trên web (boxCount:1 chỉ để lấy danh sách,
-        // không dùng để giới hạn — đơn admin không tính vào quota 30 hộp/đợt).
-        const availability = await api('pickupAvailability', { boxCount: 1 });
-        const dates = availability.dates || [];
-        if (!dates.length) {
-          select.innerHTML = '<option value="">Chưa có ngày nào đang mở</option>';
-          return;
-        }
-        select.disabled = false;
-        select.innerHTML = dates.map(slot => {
-          const full = !slot.selectable;
-          const note = full ? ' · đã hết suất công khai, vẫn tạo được cho đơn nhập tay' : '';
-          return `<option value="${slot.date}">${slot.date} · còn ${slot.remaining}/${availability.maxBoxes} hộp (web)${note}</option>`;
-        }).join('');
-        const selected = dates.find(slot => slot.date === previousSelection) || dates[0];
-        if (selected) select.value = selected.date;
+        const capacity = await api('adminPickupCapacity', { pickupDate });
+        if ($('new-order-form').elements.pickupDate.value.trim() !== pickupDate) return;
+        output.textContent = `Đơn web đang giữ ${capacity.reserved}/${capacity.maxBoxes} hộp · còn ${capacity.remaining}/${capacity.maxBoxes} hộp. Đơn nhập tay không tự trừ suất.`;
       } catch (err) {
-        select.innerHTML = '<option value="">Chưa tải được danh sách ngày</option>';
-        handleError(err);
+        if ($('new-order-form').elements.pickupDate.value.trim() === pickupDate) {
+          output.textContent = 'Chưa kiểm tra được sức chứa của ngày này.';
+        }
       }
     }
+
+    $('new-order-form').elements.pickupDate.addEventListener('change', showNewOrderCapacity);
 
     document.querySelectorAll('#new-order [name=fulfillment]').forEach(el => el.addEventListener('change', () => {
       const isDelivery = $('new-order-form').elements.fulfillment.value === 'delivery';

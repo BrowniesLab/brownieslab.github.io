@@ -413,8 +413,9 @@ async function releasePickupBoxes(env, pickupDate, boxes) {
     .bind(boxes, pickupDate).run();
 }
 
-function buildCheckout(user, phone, c) {
+function buildCheckout(user, phone, c, opts) {
   c = c || {};
+  opts = opts || {};
   const sameRecipient = c.sameRecipient !== false;
   const recipientName = sameRecipient ? String(user.name || '') : String(c.recipientName || '').trim();
   const recipientPhone = sameRecipient ? phone : normPhone(c.recipientPhone);
@@ -429,7 +430,11 @@ function buildCheckout(user, phone, c) {
 
   if (!recipientName) throw new Error('Vui lòng nhập họ tên người nhận.');
   if (!pickupDate || !pickupTime) throw new Error('Vui lòng chọn ngày và thời gian nhận bánh.');
-  if (!pickupDateSchedule().dates.includes(pickupDate)) throw new Error('Ngày nhận bánh đã qua hoặc không còn mở. Vui lòng tải lại trang để chọn ngày mới.');
+  // Khách tự đặt: chỉ được chọn đúng ngày đang mở công khai. Admin nhập tay (opts.skipDateWhitelist)
+  // cần nhập được cả ngày ngoài lịch công khai (bổ sung đơn sót, đơn quá khứ...).
+  if (!opts.skipDateWhitelist && !pickupDateSchedule().dates.includes(pickupDate)) {
+    throw new Error('Ngày nhận bánh đã qua hoặc không còn mở. Vui lòng tải lại trang để chọn ngày mới.');
+  }
   if (fulfillmentType === 'Nhận tại NEU' && !pickupLocation) throw new Error('Vui lòng ghi toà nhà, phòng hoặc giảng đường nhận bánh tại NEU.');
   if (fulfillmentType === 'Giao tận nơi' && !deliveryAddress) throw new Error('Vui lòng ghi địa chỉ giao bánh.');
 
@@ -499,7 +504,7 @@ async function adminCreateOrder(b, ctx) {
   const customerName = String(b.customerName || '').trim();
   if (!customerName) throw new Error('Vui lòng nhập tên khách.');
   if (!Array.isArray(b.items) || !b.items.length) throw new Error('Chưa chọn món nào.');
-  const checkout = buildCheckout({ name: customerName }, phone, b.checkout || {});
+  const checkout = buildCheckout({ name: customerName }, phone, b.checkout || {}, { skipDateWhitelist: true });
 
   const { results: menuRows } = await ctx.env.DB.prepare('SELECT * FROM menu WHERE active = 1').all();
   const menu = {}; menuRows.forEach(m => { menu[m.item_id] = m; });
