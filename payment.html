@@ -16,8 +16,8 @@
       <div id="payment-state" class="payment-state loading" style="height:3rem"></div>
       <div id="payment-content" hidden>
         <div class="qr-box" id="qr-box"></div>
-        <p class="small muted">Chuyển đúng số tiền, sau đó tải ảnh giao dịch để Brownies Lab xác nhận thanh toán.</p>
-        <label class="upload-box" for="payment-proof"><span>↑</span><strong>Chọn ảnh chuyển khoản</strong><small>JPG, PNG hoặc WEBP · tối đa 4 MB</small></label>
+        <p class="small muted">Quét mã và chuyển đúng số tiền — hệ thống tự nhận biết đã thanh toán trong ít phút, không cần làm gì thêm. Nếu chờ lâu chưa thấy cập nhật, bạn có thể tải ảnh giao dịch để Brownies Lab xác nhận tay.</p>
+        <label class="upload-box" for="payment-proof"><span>↑</span><strong>Chọn ảnh chuyển khoản (dự phòng)</strong><small>JPG, PNG hoặc WEBP · tối đa 4 MB</small></label>
         <input id="payment-proof" type="file" accept="image/jpeg,image/png,image/webp" hidden>
         <img id="proof-preview" class="proof-preview" alt="Xem trước ảnh chuyển khoản" hidden>
         <button class="btn btn-primary btn-block" id="upload-proof" type="button" disabled>Gửi ảnh xác nhận thanh toán</button>
@@ -34,6 +34,10 @@
     let payment = null, file = null;
     if (!session || !orderId) location.replace('order.html');
 
+    let pollTimer = null;
+    function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+    function isPaidStatus(s) { return /đã thanh toán/i.test(s || ''); }
+
     function renderPayment(data) {
       payment = data;
       $('payment-order').textContent = `Tổng thanh toán: ${formatVND(data.total)}`;
@@ -44,8 +48,23 @@
       const qrUrl = data.qrUrl || 'metadata/qr.jpg';
       $('qr-box').innerHTML = `<img src="${escapeHtml(qrUrl)}" alt="Mã QR thanh toán"><span>Quét mã QR để thanh toán ${formatVND(data.total)}</span>`;
       if (data.proofUrl) { $('payment-state').innerHTML = `Trạng thái thanh toán: <strong>${escapeHtml(data.paymentStatus)}</strong> · <a href="${escapeHtml(data.proofUrl)}" target="_blank" rel="noopener noreferrer">Xem ảnh đã gửi</a>`; }
+      if (isPaidStatus(data.paymentStatus)) {
+        stopPolling();
+        toast('Đã nhận được thanh toán!', 'success');
+        setTimeout(() => location.replace('payment-success.html'), 700);
+      }
     }
-    async function init() { try { renderPayment(await api('paymentInfo', { orderId })); } catch (err) { $('payment-state').className = 'empty'; $('payment-state').textContent = err.message; handleError(err); } }
+    /** Tự kiểm tra lại mỗi 3 giây — SePay báo về ngay khi có tiền vào, không cần khách bấm gì. */
+    function startPolling() {
+      stopPolling();
+      pollTimer = setInterval(async () => {
+        try { renderPayment(await api('paymentInfo', { orderId })); } catch (err) { /* thử lại lần poll sau */ }
+      }, 3000);
+    }
+    async function init() {
+      try { renderPayment(await api('paymentInfo', { orderId })); startPolling(); }
+      catch (err) { $('payment-state').className = 'empty'; $('payment-state').textContent = err.message; handleError(err); }
+    }
 
     $('payment-proof').addEventListener('change', (e) => {
       file = e.target.files[0] || null;
@@ -62,6 +81,7 @@
             orderId, filename: file.name, mimeType: file.type, base64: String(reader.result).split(',')[1]
           }), 'Đang gửi ảnh…');
           payment.paymentStatus = result.paymentStatus; payment.proofUrl = result.proofUrl; renderPayment(payment);
+          stopPolling();
           toast('Đã gửi ảnh. Brownies Lab sẽ xác nhận thanh toán sớm.', 'success');
           sessionStorage.removeItem('brownieslab.checkout');
           sessionStorage.removeItem('brownieslab.checkout.form');

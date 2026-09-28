@@ -30,6 +30,10 @@ export default {
       return serveProof(url, env, cors);
     }
 
+    if (url.pathname === '/sepay-webhook') {
+      return sepayWebhook(request, env);
+    }
+
     try {
       let action, body = {};
       if (request.method === 'GET') {
@@ -135,7 +139,8 @@ async function checkRateLimit(env, request, action, max) {
 const DEFAULTS = {
   POINTS_PER_BOX: 1, SIGNUP_BONUS: 2, FREE_BOX_POINTS: 10,
   SESSION_DAYS: 30, MAX_LOGIN_FAILS: 5, LOCK_MINUTES: 15,
-  NEW_ORDER_STATUS: 'Mới', PAYMENT_QR_URL: ''
+  NEW_ORDER_STATUS: 'Mới', PAYMENT_QR_URL: '',
+  BANK_ACCOUNT: '', BANK_CODE: 'MBBank', PAYMENT_PREFIX: 'DH'
 };
 function cfg(env, key) {
   const v = env[key];
@@ -675,6 +680,24 @@ async function myRedemptions(b, ctx) {
   }));
 }
 
+/** Mã dùng để khớp giao dịch SePay: <tiền tố>+<id nội bộ>, vd "DH482". SePay tách mã này
+ * ra khỏi nội dung chuyển khoản theo đúng tiền tố đã cấu hình trên dashboard của họ. */
+function paymentCodeFor(env, order) {
+  return String(cfg(env, 'PAYMENT_PREFIX') || 'DH') + order.id;
+}
+
+function sepayQrUrl(env, order) {
+  const account = cfg(env, 'BANK_ACCOUNT');
+  if (!account) return '';
+  const params = new URLSearchParams({
+    acc: account,
+    bank: cfg(env, 'BANK_CODE') || 'MBBank',
+    amount: String(Number(order.total) || 0),
+    des: paymentCodeFor(env, order)
+  });
+  return 'https://qr.sepay.vn/img?' + params.toString();
+}
+
 async function paymentInfo(b, ctx) {
   const { order } = await requireCustomerOrder(ctx.env, b.token, b.orderId);
   return {
@@ -682,7 +705,8 @@ async function paymentInfo(b, ctx) {
     paymentStatus: order.payment_status || 'Chưa thanh toán',
     paymentMethod: order.payment_method || 'Thanh toán trước',
     proofUrl: order.payment_proof_url || '',
-    qrUrl: cfg(ctx.env, 'PAYMENT_QR_URL') || ''
+    paymentCode: paymentCodeFor(ctx.env, order),
+    qrUrl: sepayQrUrl(ctx.env, order) || cfg(ctx.env, 'PAYMENT_QR_URL') || ''
   };
 }
 
@@ -886,6 +910,34 @@ async function adminDeleteRow(b, ctx) {
   return { deleted: row.id };
 }
 
+/**
+ * Đánh dấu đơn đã thanh toán (nếu chưa) và cộng điểm (nếu khách đã có tài khoản và chưa
+ * cộng). Dùng chung cho admin xác nhận tay (adminConfirmPayment) và webhook SePay tự động
+ * (sepayWebhook) — để 2 đường không lệch logic cộng điểm với nhau.
+ *
+ * Cộng điểm ngay nếu khách đã có tài khoản. Nếu chưa (chỉ mới đặt qua SĐT, chưa đăng ký),
+ * không báo lỗi — điểm vẫn neo theo SĐT (points_earned trên đơn, points_credited=0) và sẽ
+ * tự cộng vào tài khoản ngay khi họ đăng ký (xem register()).
+ */
+async function markPaidAndCredit(env, row) {
+  if (!isPaidStatus(row.payment_status)) {
+    await env.DB.prepare("UPDATE orders SET payment_status = 'Đã thanh toán' WHERE id = ?").bind(row.id).run();
+  }
+  let credited = false, points = null, accountExists = true;
+  if (!row.points_credited) {
+    const user = await env.DB.prepare('SELECT * FROM users WHERE phone = ?').bind(row.phone).first();
+    if (!user) {
+      accountExists = false;
+    } else {
+      points = (Number(user.points) || 0) + (Number(row.points_earned) || 0);
+      await env.DB.prepare('UPDATE users SET points = ? WHERE phone = ?').bind(points, row.phone).run();
+      await env.DB.prepare('UPDATE orders SET points_credited = 1 WHERE id = ?').bind(row.id).run();
+      credited = true;
+    }
+  }
+  return { credited, points, accountExists };
+}
+
 async function adminConfirmPayment(b, ctx) {
   await requireAdmin(ctx.env, b.token);
   const def = sheetDef('Orders');
@@ -903,26 +955,76 @@ async function adminConfirmPayment(b, ctx) {
   } else if (method !== 'Thanh toán khi nhận hàng') {
     throw new Error('Đơn chưa có phương thức thanh toán hợp lệ.');
   }
-  if (!isPaidStatus(row.payment_status)) {
-    await ctx.env.DB.prepare("UPDATE orders SET payment_status = 'Đã thanh toán' WHERE id = ?").bind(row.id).run();
+
+  const result = await markPaidAndCredit(ctx.env, row);
+  return { orderId: row.order_id, points: result.points, credited: result.credited, accountExists: result.accountExists };
+}
+
+// ===================== SEPAY — CỔNG THANH TOÁN TỰ ĐỘNG =====================
+/**
+ * SePay gọi POST /sepay-webhook mỗi khi có giao dịch vào tài khoản MB đã liên kết.
+ * Luôn trả HTTP 200 + {"success":true} cho mọi giao dịch đã xử lý (kể cả bỏ qua/trùng/thiếu
+ * tiền) để SePay không lặp lại gửi vô ích — CHỈ trả lỗi (401) khi sai API Key.
+ * Không tin bất kỳ dữ liệu nào từ phía khách/trình duyệt — chỉ webhook này (đã xác thực
+ * bằng SEPAY_API_KEY) mới được đổi PaymentStatus/cộng điểm cho đơn thanh toán trước.
+ */
+async function sepayWebhook(request, env) {
+  const json = (obj, status) => new Response(JSON.stringify(obj), {
+    status: status || 200,
+    headers: { 'Content-Type': 'application/json;charset=utf-8' }
+  });
+
+  const auth = request.headers.get('Authorization') || '';
+  const expected = 'Apikey ' + String(env.SEPAY_API_KEY || '');
+  if (!env.SEPAY_API_KEY || auth !== expected) {
+    return json({ success: false, error: 'Unauthorized' }, 401);
   }
 
-  // Cộng điểm ngay nếu khách đã có tài khoản. Nếu chưa (chỉ mới đặt qua SĐT, chưa đăng ký),
-  // không báo lỗi — điểm vẫn neo theo SĐT (points_earned trên đơn, points_credited=0) và sẽ
-  // tự cộng vào tài khoản ngay khi họ đăng ký (xem register()).
-  let credited = false, points = null, accountExists = true;
-  if (!row.points_credited) {
-    const user = await ctx.env.DB.prepare('SELECT * FROM users WHERE phone = ?').bind(row.phone).first();
-    if (!user) {
-      accountExists = false;
-    } else {
-      points = (Number(user.points) || 0) + (Number(row.points_earned) || 0);
-      await ctx.env.DB.prepare('UPDATE users SET points = ? WHERE phone = ?').bind(points, row.phone).run();
-      await ctx.env.DB.prepare('UPDATE orders SET points_credited = 1 WHERE id = ?').bind(row.id).run();
-      credited = true;
-    }
+  let body;
+  try { body = await request.json(); } catch (e) { return json({ success: false, error: 'Body không phải JSON hợp lệ' }, 400); }
+
+  // Chỉ xử lý tiền vào; bỏ qua tiền ra nhưng vẫn báo thành công để SePay không gửi lại.
+  if (String(body.transferType || '').toLowerCase() !== 'in') return json({ success: true });
+
+  const sepayId = String(body.id || '').trim();
+  if (!sepayId) return json({ success: true });
+
+  // Chống trùng: SePay có thể gửi lại cùng 1 giao dịch. sepay_id là khoá chính — nếu đã có
+  // thì bỏ qua (không cộng điểm lần 2) nhưng vẫn trả thành công.
+  const insert = await env.DB.prepare(
+    'INSERT OR IGNORE INTO sepay_transactions (sepay_id, order_id, amount, received_at) VALUES (?,?,?,?)'
+  ).bind(sepayId, '', Number(body.transferAmount) || 0, new Date().toISOString()).run();
+  if (!insert.meta || insert.meta.changes === 0) return json({ success: true });
+
+  // Khớp đơn: ưu tiên trường "code" SePay đã tự tách theo tiền tố cấu hình trên dashboard;
+  // nếu rỗng thì tự dò trong "content" bằng regex theo đúng tiền tố (PAYMENT_PREFIX).
+  const prefix = String(cfg(env, 'PAYMENT_PREFIX') || 'DH');
+  let code = String(body.code || '').trim();
+  if (!code) {
+    const match = String(body.content || '').match(new RegExp(prefix + '\\s*(\\d+)', 'i'));
+    if (match) code = prefix + match[1];
   }
-  return { orderId: row.order_id, points, credited, accountExists };
+  const codeMatch = code.match(new RegExp('^' + prefix + '(\\d+)$', 'i'));
+  if (!codeMatch) return json({ success: true }); // không tìm được mã đơn hợp lệ trong giao dịch
+
+  const orderRowId = Number(codeMatch[1]);
+  const order = await env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(orderRowId).first();
+  if (!order) return json({ success: true });
+
+  await env.DB.prepare('UPDATE sepay_transactions SET order_id = ? WHERE sepay_id = ?').bind(order.order_id, sepayId).run();
+
+  if (isCancelledStatus(order.status) || isCancelledStatus(order.payment_status)) return json({ success: true }); // đơn đã huỷ, không đụng vào
+
+  const amount = Number(body.transferAmount) || 0;
+  if (amount < (Number(order.total) || 0)) {
+    if (!isPaidStatus(order.payment_status)) {
+      await env.DB.prepare("UPDATE orders SET payment_status = 'Chuyển thiếu tiền — cần xử lý tay' WHERE id = ?").bind(order.id).run();
+    }
+    return json({ success: true }); // thiếu tiền: KHÔNG chuyển Đã thanh toán, để admin xử lý tay
+  }
+
+  await markPaidAndCredit(env, order);
+  return json({ success: true });
 }
 
 // ===================== NGÀY GIỜ =====================

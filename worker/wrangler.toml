@@ -20,5 +20,11 @@ LOCK_MINUTES = "15"
 NEW_ORDER_STATUS = "Mới"
 PAYMENT_QR_URL = ""
 
+# Cổng thanh toán tự động SePay — xem worker/README.md mục "SePay".
+BANK_ACCOUNT = "0326263375"
+BANK_CODE = "MBBank"
+PAYMENT_PREFIX = "DH"
+
 # Secret, KHÔNG đặt trong file này (không commit lên git):
 #   wrangler secret put PIN_SALT
+#   wrangler secret put SEPAY_API_KEY

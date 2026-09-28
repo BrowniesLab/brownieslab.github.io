@@ -108,6 +108,15 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   window_start TEXT NOT NULL
 );
 
+-- Cổng thanh toán tự động SePay: lưu id giao dịch phía SePay làm khoá chính để chống
+-- webhook gửi trùng (SePay có thể gửi lại khi backend không phản hồi kịp).
+CREATE TABLE IF NOT EXISTS sepay_transactions (
+  sepay_id TEXT PRIMARY KEY,
+  order_id TEXT NOT NULL DEFAULT '',
+  amount INTEGER NOT NULL DEFAULT 0,
+  received_at TEXT NOT NULL
+);
+
 -- 4 món mẫu, chỉ chèn khi Menu chưa có món THẬT nào (chưa từng sửa qua admin).
 -- Chạy file này lại lần sau (vd sau khi thêm bảng mới) sẽ KHÔNG tái chèn món mẫu
 -- một khi Menu đã có món thật — sửa/xoá/thêm món thật qua trang admin.

@@ -72,6 +72,37 @@ URL giữ nguyên, không cần sửa lại `app.js`.
 Sửa trực tiếp mục `[vars]` trong `wrangler.toml` (POINTS_PER_BOX, SIGNUP_BONUS, FREE_BOX_POINTS,
 SESSION_DAYS, MAX_LOGIN_FAILS, LOCK_MINUTES, NEW_ORDER_STATUS, PAYMENT_QR_URL) rồi `wrangler deploy` lại.
 
+## SePay — cổng thanh toán tự động
+
+Khách quét QR chuyển khoản, SePay theo dõi tài khoản MB và gọi webhook về Worker ngay khi có
+tiền vào — hệ thống tự đổi `PaymentStatus` thành "Đã thanh toán" và cộng điểm, không cần admin
+bấm gì. Nút "Xác nhận TT & cộng điểm" ở `/admin.html` vẫn giữ làm phương án dự phòng nếu webhook
+lỗi/trễ, hoặc khách chuyển thiếu tiền.
+
+**Cấu hình:**
+- `[vars]` trong `wrangler.toml`: `BANK_ACCOUNT` (số tài khoản MB), `BANK_CODE` (mặc định `MBBank`),
+  `PAYMENT_PREFIX` (tiền tố mã đơn, phải khớp đúng tiền tố đã cấu hình trên dashboard SePay).
+- Secret: `wrangler secret put SEPAY_API_KEY` — chuỗi bạn **tự đặt** khi tạo webhook trên
+  my.sepay.vn (mục Tích hợp → Webhooks → Thêm webhook → bước Bảo mật → chọn "API Key"),
+  KHÔNG phải SePay tự sinh ra.
+
+**Tạo webhook trên my.sepay.vn** (my.sepay.vn/webhooks → Thêm webhook):
+1. URL: `https://brownies-lab.brownieslab.workers.dev/sepay-webhook`
+2. Loại sự kiện: "Tiền vào"
+3. Chọn tài khoản MB, cấu hình tiền tố mã đơn (khớp `PAYMENT_PREFIX`)
+4. Bảo mật: chọn "API Key", tự đặt 1 chuỗi ngẫu nhiên (`openssl rand -hex 32`), dán vào cả đây
+   và vào secret `SEPAY_API_KEY` ở trên
+
+**Cách khớp đơn:** mỗi đơn thanh toán trước có mã riêng `<PAYMENT_PREFIX><id nội bộ>` (vd `DH83`),
+nhúng sẵn vào link QR (`https://qr.sepay.vn/img?acc=...&amount=...&des=DH83`) nên khách quét QR là
+ngân hàng tự điền đúng số tiền + nội dung, không cần gõ tay.
+
+**Chống trùng:** bảng `sepay_transactions` lưu `id` giao dịch phía SePay làm khoá chính — webhook
+gửi lại (SePay tự động thử lại khi lỗi) sẽ bị bỏ qua, không cộng điểm 2 lần.
+
+**Chuyển thiếu tiền:** nếu `transferAmount` nhỏ hơn tổng đơn, đơn được đánh dấu "Chuyển thiếu tiền
+— cần xử lý tay" thay vì "Đã thanh toán" — admin xử lý thủ công qua `/admin.html`.
+
 ## Khác biệt so với bản Apps Script
 
 | | Apps Script (`Code.gs`) | Worker (`worker/src/index.js`) |
