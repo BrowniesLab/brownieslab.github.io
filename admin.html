@@ -24,6 +24,7 @@
     <section class="production-summary" id="production-summary" hidden>
       <div class="production-summary-heading"><div><p class="eyebrow">CHUẨN BỊ BÁNH</p><h2>Tổng hợp làm bánh</h2></div><p class="small muted">Tính toàn bộ đơn chưa huỷ, gồm cả đơn nhập tay.</p></div>
       <div class="production-batches" id="production-batches"></div>
+      <div class="production-revenue" id="production-revenue"></div>
     </section>
 
     <div class="toolbar">
@@ -346,8 +347,9 @@
         hiddenOrders.missingDate ? `${hiddenOrders.missingDate} đơn thiếu ngày cần bổ sung` : ''
       ].filter(Boolean).join(' · ');
       const redemptionNote = redemptionRequests ? ` · Đổi điểm: ${redemptionRequests} yêu cầu / ${redemptionBoxes} hộp chờ xếp ngày` : '';
+      section.querySelector('.small').textContent = `${totalOrders} đơn hôm nay/sắp giao · Khách đặt: ${activeOrders.customer} · Nhập tay: ${activeOrders.manual}${redemptionNote}${hiddenNote ? ` · ${hiddenNote}` : ''}.`;
       const revenueDue = revenueTotal - revenuePaid;
-      section.querySelector('.small').textContent = `${totalOrders} đơn hôm nay/sắp giao · Khách đặt: ${activeOrders.customer} · Nhập tay: ${activeOrders.manual}${redemptionNote}${hiddenNote ? ` · ${hiddenNote}` : ''}. Doanh thu: ${formatVND(revenueTotal)} · Đã thu: ${formatVND(revenuePaid)} · Cần thu: ${formatVND(revenueDue)}.`;
+      $('production-revenue').innerHTML = `<div><dt>Doanh thu</dt><dd>${formatVND(revenueTotal)}</dd></div><div><dt>Đã thu</dt><dd>${formatVND(revenuePaid)}</dd></div><div><dt>Cần thu</dt><dd>${formatVND(revenueDue)}</dd></div>`;
     }
 
     function fieldLabel(header) {

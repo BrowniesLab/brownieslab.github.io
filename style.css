@@ -571,4 +571,8 @@ dialog textarea { min-height: 6rem; font-family: ui-monospace, Menlo, monospace;
 .production-batch dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
 .production-batch dd small,.production-batch p small { display: block; margin-top: .12rem; color: var(--muted); font-size: .72rem; font-weight: 500; }
 .production-batch p { margin: .65rem 0 0; padding-top: .55rem; border-top: 1px solid var(--div); }
+.production-revenue { display: flex; flex-wrap: wrap; gap: .7rem; margin-top: .7rem; }
+.production-revenue div { flex: 1 1 10rem; padding: .85rem; border-radius: var(--r); background: var(--card); border: 1px solid var(--div); text-align: center; }
+.production-revenue dt { margin: 0 0 .3rem; color: var(--muted); font-size: .85rem; }
+.production-revenue dd { margin: 0; font-weight: 800; font-size: 1.2rem; font-variant-numeric: tabular-nums; }
 @media (max-width: 32rem) { .production-summary-heading { display: block; } .production-summary-heading .small { text-align: left; } }
