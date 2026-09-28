@@ -714,6 +714,9 @@ async function uploadPaymentProof(b, ctx) {
   const { order } = await requireCustomerOrder(ctx.env, b.token, b.orderId);
   if (isCancelledStatus(order.status)) throw new Error('Không thể tải ảnh cho đơn đã huỷ.');
   if (order.payment_method !== 'Thanh toán trước') throw new Error('Đơn này thanh toán khi nhận hàng, không cần gửi minh chứng.');
+  // Đơn đã được xác nhận (webhook SePay hoặc admin xác nhận tay) thì không cho ghi đè lại
+  // PaymentStatus về "Chờ xác nhận" nữa — tránh đơn đã thanh toán bị "tụt hạng" trở lại.
+  if (isPaidStatus(order.payment_status)) throw new Error('Đơn này đã được xác nhận thanh toán, không cần gửi ảnh nữa.');
 
   const mimeType = String(b.mimeType || '').toLowerCase();
   const allowed = ['image/jpeg', 'image/png', 'image/webp'];

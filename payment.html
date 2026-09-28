@@ -16,11 +16,18 @@
       <div id="payment-state" class="payment-state loading" style="height:3rem"></div>
       <div id="payment-content" hidden>
         <div class="qr-box" id="qr-box"></div>
-        <p class="small muted">Quét mã và chuyển đúng số tiền — hệ thống tự nhận biết đã thanh toán trong ít phút, không cần làm gì thêm. Nếu chờ lâu chưa thấy cập nhật, bạn có thể tải ảnh giao dịch để Brownies Lab xác nhận tay.</p>
-        <label class="upload-box" for="payment-proof"><span>↑</span><strong>Chọn ảnh chuyển khoản (dự phòng)</strong><small>JPG, PNG hoặc WEBP · tối đa 4 MB</small></label>
-        <input id="payment-proof" type="file" accept="image/jpeg,image/png,image/webp" hidden>
-        <img id="proof-preview" class="proof-preview" alt="Xem trước ảnh chuyển khoản" hidden>
-        <button class="btn btn-primary btn-block" id="upload-proof" type="button" disabled>Gửi ảnh xác nhận thanh toán</button>
+        <p class="small muted">Quét mã và chuyển đúng số tiền — hệ thống tự nhận biết đã thanh toán trong ít phút, không cần làm gì thêm.</p>
+        <!-- Gửi ảnh chuyển khoản thủ công: tạm ẩn khỏi giao diện khách từ khi có SePay tự động
+             xác nhận (gửi ảnh sau khi đã thanh toán từng ghi đè nhầm PaymentStatus về "Chờ xác
+             nhận", làm đơn không tự chuyển "Thanh toán thành công" nữa). Giữ lại code JS +
+             action uploadPaymentProof phía backend làm phương án dự phòng, chỉ cần bỏ "hidden"
+             ở dòng dưới để bật lại khi cần. -->
+        <div id="proof-upload-box" hidden>
+          <label class="upload-box" for="payment-proof"><span>↑</span><strong>Chọn ảnh chuyển khoản (dự phòng)</strong><small>JPG, PNG hoặc WEBP · tối đa 4 MB</small></label>
+          <input id="payment-proof" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+          <img id="proof-preview" class="proof-preview" alt="Xem trước ảnh chuyển khoản" hidden>
+          <button class="btn btn-primary btn-block" id="upload-proof" type="button" disabled>Gửi ảnh xác nhận thanh toán</button>
+        </div>
       </div>
       <button class="btn btn-block" id="edit-order" type="button" hidden style="margin-top:.75rem">Quay lại chỉnh đơn</button>
       <a class="btn btn-block" href="order.html?tab=history" style="margin-top:.75rem">Xem đơn hàng của tôi</a>

@@ -530,6 +530,7 @@ function uploadPaymentProof_(token, orderId, filename, mimeType, base64) {
   var ref = requireCustomerOrder_(token, orderId);
   if (isCancelledStatus_(ref.found.obj.Status)) throw new Error('Không thể tải ảnh cho đơn đã huỷ.');
   if (String(ref.found.obj.PaymentMethod || '') !== 'Thanh toán trước') throw new Error('Đơn này thanh toán khi nhận hàng, không cần gửi minh chứng.');
+  if (isPaidStatus_(ref.found.obj.PaymentStatus)) throw new Error('Đơn này đã được xác nhận thanh toán, không cần gửi ảnh nữa.');
   var allowed = ['image/jpeg', 'image/png', 'image/webp'];
   if (allowed.indexOf(String(mimeType || '').toLowerCase()) < 0) throw new Error('Chỉ nhận ảnh JPG, PNG hoặc WEBP.');
   var bytes = Utilities.base64Decode(String(base64 || ''));
