@@ -285,6 +285,7 @@
       const batches = new Map();
       const activeOrders = { customer: 0, manual: 0 };
       const hiddenOrders = { past: 0, missingDate: 0 };
+      let revenueTotal = 0, revenuePaid = 0;
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
       table.rows.forEach(row => {
@@ -295,6 +296,9 @@
 
         const source = /-A[A-Z0-9]+$/i.test(orderValue(row, 'OrderID')) ? 'manual' : 'customer';
         activeOrders[source]++;
+        const orderTotal = Number(orderValue(row, 'Total')) || 0;
+        revenueTotal += orderTotal;
+        if (isPaidText(orderValue(row, 'PaymentStatus'))) revenuePaid += orderTotal;
         if (!batches.has(dateInfo.key)) {
           batches.set(dateInfo.key, { ...dateInfo, total: 0, customer: 0, manual: 0, items: new Map() });
         }
@@ -342,7 +346,8 @@
         hiddenOrders.missingDate ? `${hiddenOrders.missingDate} đơn thiếu ngày cần bổ sung` : ''
       ].filter(Boolean).join(' · ');
       const redemptionNote = redemptionRequests ? ` · Đổi điểm: ${redemptionRequests} yêu cầu / ${redemptionBoxes} hộp chờ xếp ngày` : '';
-      section.querySelector('.small').textContent = `${totalOrders} đơn hôm nay/sắp giao · Khách đặt: ${activeOrders.customer} · Nhập tay: ${activeOrders.manual}${redemptionNote}${hiddenNote ? ` · ${hiddenNote}` : ''}.`;
+      const revenueDue = revenueTotal - revenuePaid;
+      section.querySelector('.small').textContent = `${totalOrders} đơn hôm nay/sắp giao · Khách đặt: ${activeOrders.customer} · Nhập tay: ${activeOrders.manual}${redemptionNote}${hiddenNote ? ` · ${hiddenNote}` : ''}. Doanh thu: ${formatVND(revenueTotal)} · Đã thu: ${formatVND(revenuePaid)} · Cần thu: ${formatVND(revenueDue)}.`;
     }
 
     function fieldLabel(header) {
