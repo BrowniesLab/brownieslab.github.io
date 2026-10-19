@@ -51,7 +51,31 @@ button,input,select,textarea { font: inherit; color: inherit; }
 .small { font-size: .875rem; }
 [hidden] { display: none !important; }
 
-/* ── ANIMATIONS: chỉ 2 keyframes ─────────────────────── */
+/* ── CHUYỂN TRANG ──────────────────────────────────── */
+@view-transition { navigation: auto; }
+
+@keyframes pageLeave {
+  to { opacity: 0; }
+}
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+::view-transition-group(root) { animation-duration: .28s; }
+::view-transition-old(root) { animation: pageLeave .16s ease-out both; mix-blend-mode: normal; }
+::view-transition-new(root) { animation: pageEnter .28s var(--ease) both; mix-blend-mode: normal; }
+
+/* Tránh chạy chồng hiệu ứng nội dung và hiệu ứng toàn trang. */
+html[data-page-motion] :is(main, .order-wrap, .checkout-wrap, .payment-wrap, .auth-form) { animation: none; }
+html { scroll-behavior: smooth; }
+[id] { scroll-margin-top: 1.25rem; }
+@media (prefers-reduced-motion: reduce) {
+  @view-transition { navigation: none; }
+  html { scroll-behavior: auto; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}
+
+/* ── ANIMATIONS TRONG TRANG ─────────────────────────── */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(18px); }
   to   { opacity: 1; transform: translateY(0); }

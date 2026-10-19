@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#3D2317">
   <title>Brownies Lab · Checkout</title>
+  <script src="page-transitions.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -87,7 +88,7 @@
 
     try { draft = JSON.parse(sessionStorage.getItem(CHECKOUT_KEY) || 'null'); } catch (e) {}
     try { savedCheckout = JSON.parse(sessionStorage.getItem(CHECKOUT_FORM_KEY) || 'null'); } catch (e) {}
-    if (!session || !draft || !Array.isArray(draft.items) || !draft.items.length) location.replace('order.html');
+    if (!session || !draft || !Array.isArray(draft.items) || !draft.items.length) navigateTo('order.html', { replace: true });
 
     function cartBoxCount() {
       return draft.items.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
@@ -188,11 +189,11 @@
         }), 'Đang tạo đơn…');
         Session.update({ points: r.points });
         if (paymentMethod === 'prepaid') {
-          location.replace('payment.html?order=' + encodeURIComponent(r.orderId));
+          navigateTo('payment.html?order=' + encodeURIComponent(r.orderId), { replace: true });
         } else {
           sessionStorage.removeItem(CHECKOUT_KEY);
           sessionStorage.removeItem(CHECKOUT_FORM_KEY);
-          location.replace('order-success.html');
+          navigateTo('order-success.html', { replace: true });
         }
       } catch (err) {
         if (/vừa đủ 30 hộp/i.test(String(err.message || err))) await renderDates().catch(() => {});

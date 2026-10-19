@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#3D2317">
   <title>Brownies Lab · Đăng nhập</title>
+  <script src="page-transitions.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="auth-page">
@@ -105,7 +106,7 @@
       const n = new URLSearchParams(location.search).get('next');
       return n && n.startsWith('order.html') ? n : 'order.html';
     }
-    if (Session.get()) location.replace(nextUrl());
+    if (Session.get()) navigateTo(nextUrl(), { replace: true });
 
     const tabs  = { login: document.getElementById('tab-login'), register: document.getElementById('tab-register') };
     const forms = { login: document.getElementById('form-login'), register: document.getElementById('form-register') };
@@ -125,7 +126,7 @@
     function checkPin(pin) {
       if (!/^\d{4,6}$/.test(pin)) throw new Error('PIN phải gồm 4 đến 6 chữ số.');
     }
-    function onSuccess(session) { Session.set(session); location.replace(nextUrl()); }
+    function onSuccess(session) { Session.set(session); navigateTo(nextUrl(), { replace: true }); }
 
     forms.login.addEventListener('submit', async (e) => {
       e.preventDefault(); const f = e.target;

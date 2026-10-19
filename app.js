@@ -1,5 +1,13 @@
 /* Brownies Lab — dùng chung cho mọi trang: gọi API + quản lý phiên đăng nhập */
 
+// Vẫn điều hướng bình thường nếu file hiệu ứng chưa tải được.
+if (typeof window.navigateTo !== 'function') {
+  window.navigateTo = (href, { replace = false } = {}) => {
+    if (replace) location.replace(href);
+    else location.assign(href);
+  };
+}
+
 // Backend: Cloudflare Worker + D1 (thay cho Apps Script/Google Sheet).
 const API_URL = 'https://brownies-lab.brownieslab.workers.dev';
 
@@ -77,7 +85,7 @@ async function apiGet(action) {
 function requireSession({ admin = false } = {}) {
   const s = Session.get();
   if (!s || (admin && !s.isAdmin)) {
-    location.replace('login.html');
+    navigateTo('login.html', { replace: true });
     return null;
   }
   return s;
@@ -87,7 +95,7 @@ function requireSession({ admin = false } = {}) {
 function handleError(err) {
   if (err && err.isAuth) {
     toast(err.message, 'error');
-    setTimeout(() => location.replace('login.html'), 1200);
+    setTimeout(() => navigateTo('login.html', { replace: true }), 1200);
     return;
   }
   toast(err && err.message ? err.message : String(err), 'error');
@@ -97,7 +105,7 @@ async function logout() {
   const s = Session.get();
   Session.clear();
   if (s) { try { await api('logout', { token: s.token }); } catch (e) { /* bỏ qua */ } }
-  location.replace('order.html');
+  navigateTo('order.html', { replace: true });
 }
 
 // ---------- tiện ích giao diện ----------
