@@ -58,10 +58,10 @@
 .lab-tags { display: flex; gap: .35rem; margin-top: .55rem; flex-wrap: wrap; }
 .lab-tags span { padding: .1rem .4rem; background: var(--bg); border: 1px solid var(--lab-rule); border-radius: 2px; font: .6rem/1.5 var(--lab-mono); }
 .lab-index { display: grid; grid-template-columns: 1fr 1fr 1fr; margin-block: 1rem 5.5rem; border-block: 1px solid var(--lab-rule); }
-.lab-index a { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1.1rem 1.3rem; text-decoration: none; font-size: .8rem; }
+.lab-index a { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1.1rem 1.3rem; text-decoration: none; font-size: .95rem; font-weight: 600; }
 .lab-index a:first-child { padding-left: 0; }
 .lab-index a + a { border-left: 1px solid var(--lab-rule); }
-.lab-index a > span:first-child { font: .6rem var(--lab-mono); color: var(--lab-accent); }
+.lab-index a > span:first-child { font: 700 .7rem/1.5 var(--lab-mono); color: var(--lab-accent); }
 .lab-index a:hover { color: var(--lab-accent); }
 .lab-journal { display: grid; grid-template-columns: .9fr 1.1fr; align-items: center; gap: clamp(2rem, 6vw, 6rem); padding-bottom: 6rem; scroll-margin-top: 2rem; }
 .lab-photo { position: relative; margin: 0; padding: .75rem .75rem 0; border: 1px solid var(--lab-rule); background: var(--paper); transform: rotate(-3deg); }
@@ -128,8 +128,8 @@
   .lab-stage { --stage-height: clamp(19rem, 70vw, 29rem); }
   .lab-product-image { width: 72%; }
   .lab-index { margin-block: 0 3rem; }
-  .lab-index a { flex-wrap: wrap; padding: .85rem; gap: .45rem; font-size: .68rem; }
-  .lab-index a > span:first-child { width: 100%; }
+  .lab-index a { flex-wrap: wrap; padding: .85rem; gap: .45rem; font-size: .8rem; }
+  .lab-index a > span:first-child { width: 100%; font-size: .65rem; }
   .lab-journal { grid-template-columns: 1fr; padding-block: 0 3rem; gap: 2.5rem; }
   .lab-photo { max-width: 32rem; margin: 1rem .5rem 0; }
   .lab-photo-window { height: clamp(17rem, 60vw, 24rem); }
