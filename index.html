@@ -3,12 +3,94 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta http-equiv="refresh" content="0; url=order.html">
-  <title>Brownies Lab</title>
+  <meta name="theme-color" content="#3D2317">
+  <meta name="description" content="Brownies Lab — brownie nướng mới, ngọt vừa đủ và được làm bằng cả sự nâng niu.">
+  <title>Brownies Lab · Brownie nướng mới</title>
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
-  <script>location.replace('order.html');</script>
-  <noscript><p>Xem menu tại <a href="order.html">order.html</a>.</p></noscript>
+<body class="home-page">
+  <header class="home-nav">
+    <div class="home-nav-inner">
+      <a class="home-brand" href="index.html" aria-label="Brownies Lab - Trang chủ">
+        <img src="metadata/Logo.png" alt="">
+        <span>Brownies Lab<small>TESTED · TASTED · PERFECTED</small></span>
+      </a>
+      <nav class="home-links" aria-label="Điều hướng chính">
+        <a class="active" href="index.html">Trang chủ</a>
+        <a href="order.html">Đặt bánh</a>
+        <a href="redeem.html">Đổi điểm</a>
+        <a href="login.html">Đăng nhập</a>
+      </nav>
+      <a class="home-cart" href="order.html" aria-label="Đi tới trang đặt bánh">Giỏ bánh <span>↗</span></a>
+    </div>
+  </header>
+
+  <main class="home-main">
+    <section class="home-hero" aria-labelledby="home-title">
+      <div class="home-hero-copy">
+        <p class="home-kicker">✳ BROWNIES NƯỚNG MỚI · HÀ NỘI</p>
+        <h1 id="home-title">Một miếng brownie.<br><em>Một ngày dịu hơn.</em></h1>
+        <p class="home-lead">Chocolate đậm vị, ruột bánh ẩm dẻo, ngọt vừa đủ. Brownies Lab gửi bạn một khoảng nhỏ để chậm lại và tận hưởng.</p>
+        <div class="home-hero-actions">
+          <a class="btn btn-primary" href="order.html">Đặt bánh ngay <span aria-hidden="true">↗</span></a>
+          <a class="home-text-link" href="order.html">Xem menu <span aria-hidden="true">→</span></a>
+        </div>
+        <p class="home-note">♡ Bánh nhỏ, thương nhiều.</p>
+      </div>
+      <div class="home-hero-visual">
+        <img src="metadata/DSCF9087.JPG" alt="Các hộp brownie của Brownies Lab">
+        <span class="home-photo-label">Nướng theo từng mẻ nhỏ</span>
+      </div>
+    </section>
+
+    <section class="home-marquee" aria-label="Cam kết Brownies Lab">
+      <span>Nướng mới mỗi mẻ</span><b>✳</b>
+      <span>Chocolate đậm vị</span><b>✳</b>
+      <span>Ngọt vừa đủ</span><b>✳</b>
+      <span>Gói bằng cả sự nâng niu</span>
+    </section>
+
+    <section class="home-way" aria-labelledby="home-way-title">
+      <p class="home-kicker">THE BROWNIES LAB WAY</p>
+      <h2 id="home-way-title">Những điều nhỏ,<br>làm nên Brownies Lab.</h2>
+      <p class="home-way-intro">Không cầu kỳ. Chỉ là brownie ngon, được làm thật tử tế.</p>
+      <div class="home-values">
+        <article>
+          <span class="home-value-icon">✳</span>
+          <p class="home-value-number">01 / NƯỚNG MỚI</p>
+          <h3>Thơm từ mẻ bánh mới</h3>
+          <p>Từng mẻ nhỏ được nướng mới để khi đến tay bạn, bánh vẫn vẹn nguyên mùi chocolate.</p>
+        </article>
+        <article>
+          <span class="home-value-icon">◌</span>
+          <p class="home-value-number">02 / VỪA ĐỦ NGỌT</p>
+          <h3>Đậm vị, không gắt</h3>
+          <p>Một chút ngọt vừa đủ để vị cacao, caramel và matcha được kể câu chuyện riêng của mình.</p>
+        </article>
+        <article>
+          <span class="home-value-icon">♡</span>
+          <p class="home-value-number">03 / LÀM BẰNG TAY</p>
+          <h3>Nâng niu từng hộp bánh</h3>
+          <p>Từ nhào bột đến gói bánh, mọi điều đều được làm bằng đôi tay và sự nâng niu.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="home-social" aria-labelledby="home-social-title">
+      <img src="metadata/Logo.png" alt="" class="home-social-logo">
+      <p class="home-kicker">MỘT CHÚT BROWNIES LAB MỖI NGÀY</p>
+      <h2 id="home-social-title">Ghé căn bếp nhỏ<br>của tụi mình.</h2>
+      <p>Mẻ bánh mới, những chuyện nhỏ và một chút ngọt ngào mỗi ngày.</p>
+      <a class="btn home-social-btn" href="https://www.instagram.com/brownies_labb/" target="_blank" rel="noopener noreferrer">Theo dõi Brownies Lab trên Instagram <span aria-hidden="true">↗</span></a>
+      <a class="home-handle" href="https://www.instagram.com/brownies_labb/" target="_blank" rel="noopener noreferrer">@brownies_labb</a>
+    </section>
+  </main>
+
+  <footer class="home-footer">
+    <div class="home-footer-inner">
+      <a class="home-brand" href="index.html"><img src="metadata/Logo.png" alt=""><span>Brownies Lab<small>Bánh nhỏ, thương nhiều.</small></span></a>
+      <p>Hà Nội, Việt Nam · Brownie nướng mới theo từng mẻ.</p>
+    </div>
+  </footer>
 </body>
 </html>
