@@ -22,13 +22,44 @@
     <div class="tabs" role="tablist" id="sheet-tabs"></div>
     <div class="tabs" role="tablist" id="order-stage-tabs" hidden></div>
 
+    <section class="admin-analytics" id="analytics" aria-labelledby="analytics-title" hidden>
+      <div class="analytics-heading">
+        <div><p class="eyebrow">THỐNG KÊ</p><h1 id="analytics-title">Bán hàng &amp; phiên đăng nhập</h1></div>
+        <button class="btn btn-sm" id="analytics-reload" type="button">Tải lại thống kê</button>
+      </div>
+      <p class="small muted" id="analytics-status" role="status"></p>
+      <h2>Phiên đăng nhập hiện tại</h2>
+      <dl class="analytics-cards" id="analytics-sessions"></dl>
+      <p class="small muted">Số phiên còn hiệu lực, không phải tổng lượt đăng nhập từ trước đến nay. Một tài khoản có thể có nhiều phiên; phiên đã đăng xuất hoặc đã xoá không còn được đếm.</p>
+
+      <h2 class="analytics-sales-title">Số hộp &amp; doanh thu theo loại</h2>
+      <p class="small muted">Chỉ tính đơn đã xác nhận thanh toán, không tính đơn huỷ hay đổi điểm. Gồm cả khách đặt trên web và đơn nhập tay. Giá lấy từ từng đơn đã lưu.</p>
+      <div class="analytics-filters">
+        <label class="field"><span>Từ ngày tạo đơn</span><input type="date" id="analytics-from"></label>
+        <label class="field"><span>Đến hết ngày</span><input type="date" id="analytics-to"></label>
+        <button class="btn btn-sm" type="button" id="analytics-clear">Tất cả thời gian</button>
+        <button class="btn btn-sm btn-primary" type="button" id="analytics-export" disabled>Xuất CSV</button>
+      </div>
+      <p class="small muted">Ngày tạo đơn theo giờ Việt Nam. Bộ lọc ngày chỉ áp dụng cho thống kê bán hàng.</p>
+      <p class="analytics-warning" id="analytics-warning" role="status" hidden></p>
+      <dl class="analytics-cards" id="analytics-totals"></dl>
+      <div class="table-wrap">
+        <table class="analytics-table">
+          <caption class="sr-title">Số hộp đã bán và doanh thu từng loại bánh</caption>
+          <thead><tr><th scope="col">Loại bánh</th><th scope="col">Khách đặt (hộp)</th><th scope="col">Nhập tay (hộp)</th><th scope="col">Tổng số hộp</th><th scope="col">Doanh thu tiền bánh</th></tr></thead>
+          <tbody id="analytics-rows"></tbody>
+          <tfoot id="analytics-footer"></tfoot>
+        </table>
+      </div>
+    </section>
+
     <section class="production-summary" id="production-summary" hidden>
       <div class="production-summary-heading"><div><p class="eyebrow">CHUẨN BỊ BÁNH</p><h2>Tổng hợp làm bánh</h2></div><p class="small muted">Tính toàn bộ đơn chưa huỷ, gồm cả đơn nhập tay.</p></div>
       <div class="production-batches" id="production-batches"></div>
       <div class="production-revenue" id="production-revenue"></div>
     </section>
 
-    <div class="toolbar">
+    <div class="toolbar" id="data-toolbar">
       <label class="field">
         <span class="sr-title">Tìm trong bảng</span>
         <input id="search" type="search" placeholder="Tìm trong bảng…">
@@ -38,7 +69,7 @@
     </div>
     <p class="small muted" id="meta"></p>
 
-    <div class="table-wrap">
+    <div class="table-wrap" id="data-table-wrap">
       <table class="grid" id="grid">
         <tbody><tr><td class="loading" style="height:3rem"></td></tr></tbody>
       </table>
@@ -105,9 +136,10 @@
   </dialog>
 
   <script src="app.js"></script>
+  <script src="admin-analytics.js"></script>
   <script>
-    const SHEETS = ['Orders','Redemptions','Users','Menu','Sessions'];
-    const LABELS = { Orders:'Đơn hàng', Redemptions:'Đổi điểm', Users:'Khách hàng', Menu:'Menu', Sessions:'Phiên đăng nhập' };
+    const SHEETS = ['Orders','Statistics','Redemptions','Users','Menu','Sessions'];
+    const LABELS = { Orders:'Đơn hàng', Statistics:'Thống kê', Redemptions:'Đổi điểm', Users:'Khách hàng', Menu:'Menu', Sessions:'Phiên đăng nhập' };
     const session = requireSession({ admin: true });
     const $ = (id) => document.getElementById(id);
 
@@ -115,6 +147,9 @@
     let table   = { headers: [], rows: [] };
     let redemptionTable = { headers: [], rows: [] };
     let editing = null;
+    let analyticsData = null;
+    let analyticsSummary = null;
+    let loadVersion = 0;
 
     // Pipeline đơn hàng: Thanh toán trước → xác nhận thanh toán → chưa giao → đơn hàng.
     //                     Thanh toán khi nhận hàng → chưa giao → xác nhận thanh toán → đơn hàng.
@@ -203,30 +238,122 @@
     $('search').addEventListener('input', render);
     $('add').addEventListener('click', () => openEditor(null));
     $('editor-cancel').addEventListener('click', () => $('editor').close());
+    $('analytics-reload').addEventListener('click', load);
+    ['analytics-from', 'analytics-to'].forEach(id => $(id).addEventListener('change', renderAnalytics));
+    $('analytics-clear').addEventListener('click', () => {
+      $('analytics-from').value = '';
+      $('analytics-to').value = '';
+      renderAnalytics();
+    });
+    $('analytics-export').addEventListener('click', () => {
+      if (!analyticsSummary) return;
+      const blob = new Blob([AdminAnalytics.salesCSV(analyticsSummary)], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `brownies-sales-${$('analytics-from').value || 'all'}-${$('analytics-to').value || 'all'}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
 
     if (session) load();
 
     async function load() {
+      const requested = current;
+      const version = ++loadVersion;
+      const isStatistics = requested === 'Statistics';
+      $('analytics').hidden = !isStatistics;
+      $('data-toolbar').hidden = isStatistics;
+      $('data-table-wrap').hidden = isStatistics;
+      $('meta').hidden = isStatistics;
+      $('production-summary').hidden = requested !== 'Orders';
       $('add').hidden = current === 'Redemptions' || current === 'Orders';
       $('order-stage-tabs').hidden = current !== 'Orders';
       $('grid').innerHTML = '<tbody><tr><td class="loading" style="height:3rem"></td></tr></tbody>';
       try {
-        if (current === 'Orders') {
+        if (isStatistics) {
+          analyticsData = null;
+          analyticsSummary = null;
+          $('analytics-export').disabled = true;
+          $('analytics-status').textContent = 'Đang tải dữ liệu thống kê…';
+          ['analytics-sessions', 'analytics-totals', 'analytics-rows', 'analytics-footer'].forEach(id => $(id).replaceChildren());
+          $('analytics-warning').hidden = true;
+          const [orders, sessions] = await Promise.all([
+            api('adminListSheet', { sheet: 'Orders' }),
+            api('adminListSheet', { sheet: 'Sessions' })
+          ]);
+          if (version !== loadVersion || requested !== current) return;
+          analyticsData = { orders, sessions };
+          $('analytics-status').textContent = 'Cập nhật: ' + new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+          renderAnalytics();
+          return;
+        }
+        if (requested === 'Orders') {
           const [orders, redemptions] = await Promise.all([
             api('adminListSheet', { sheet: 'Orders' }),
             api('adminListSheet', { sheet: 'Redemptions' })
           ]);
+          if (version !== loadVersion || requested !== current) return;
           table = orders;
           redemptionTable = redemptions;
         } else {
-          table = await api('adminListSheet', { sheet: current });
+          const loaded = await api('adminListSheet', { sheet: requested });
+          if (version !== loadVersion || requested !== current) return;
+          table = loaded;
           redemptionTable = { headers: [], rows: [] };
         }
         render();
       } catch (err) {
+        if (version !== loadVersion || requested !== current) return;
+        if (isStatistics) $('analytics-status').textContent = 'Không tải được thống kê. Bấm “Tải lại thống kê” để thử lại.';
         $('grid').innerHTML = '<tbody><tr><td class="empty">Không tải được dữ liệu.</td></tr></tbody>';
         handleError(err);
       }
+    }
+
+    function renderAnalytics() {
+      if (current !== 'Statistics' || !analyticsData) return;
+      analyticsSummary = null;
+      $('analytics-export').disabled = true;
+      const sessions = AdminAnalytics.summarizeSessions(analyticsData.sessions);
+      $('analytics-sessions').innerHTML = [
+        ['Phiên còn hiệu lực', sessions.active],
+        ['Tài khoản có phiên còn hiệu lực', sessions.accounts],
+        ['Phiên hết hạn còn lưu', sessions.expired]
+      ].map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('');
+      const warnings = [];
+      if (sessions.invalid) warnings.push(`${sessions.invalid} phiên thiếu thời gian hết hạn hợp lệ, chưa được đếm.`);
+      let summary;
+      try {
+        summary = AdminAnalytics.summarizeSales(analyticsData.orders, {
+          from: $('analytics-from').value, to: $('analytics-to').value
+        });
+      } catch (err) {
+        $('analytics-totals').replaceChildren();
+        $('analytics-rows').replaceChildren();
+        $('analytics-footer').replaceChildren();
+        $('analytics-warning').textContent = err.message;
+        $('analytics-warning').hidden = false;
+        return;
+      }
+      if (summary.invalidOrders) warnings.push(`${summary.invalidOrders} đơn đã thanh toán có dữ liệu món hoặc số tiền không hợp lệ, chưa được tính.`);
+      if (summary.undatedOrders) warnings.push(`${summary.undatedOrders} đơn thiếu ngày tạo hợp lệ, chưa được tính trong khoảng ngày đã chọn.`);
+      if (summary.difference) warnings.push(`Tổng tiền các đơn là ${formatVND(summary.orderTotal)}, chênh lệch ${formatVND(summary.difference)} với tiền bánh. Phần chênh lệch được giữ riêng, không tự phân bổ vào từng loại bánh.`);
+      $('analytics-warning').textContent = warnings.join(' ');
+      $('analytics-warning').hidden = !warnings.length;
+      $('analytics-totals').innerHTML = [
+        ['Đơn đã thanh toán được tính', summary.orders],
+        ['Tổng số hộp đã bán', summary.boxes],
+        ['Doanh thu tiền bánh', formatVND(summary.revenue)]
+      ].map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('');
+      $('analytics-rows').innerHTML = summary.items.map(item =>
+        `<tr><th scope="row">${escapeHtml(item.name)}</th><td>${item.customer}</td><td>${item.manual}</td><td>${item.boxes}</td><td>${formatVND(item.revenue)}</td></tr>`
+      ).join('') || '<tr><td colspan="5" class="empty">Chưa có đơn đã thanh toán trong khoảng thời gian này.</td></tr>';
+      $('analytics-footer').innerHTML = `<tr><th scope="row">Tổng</th><td>${summary.customer}</td><td>${summary.manual}</td><td>${summary.boxes}</td><td>${formatVND(summary.revenue)}</td></tr>`;
+      analyticsSummary = summary;
+      $('analytics-export').disabled = false;
     }
 
     function cellText(v) {
@@ -401,6 +528,7 @@
     }
 
     function render() {
+      if (current === 'Statistics') { renderAnalytics(); return; }
       renderProductionSummary();
       if (current === 'Orders') {
         document.querySelectorAll('#order-stage-tabs [data-stage]').forEach(t =>

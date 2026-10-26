@@ -519,6 +519,26 @@ a.social-link:hover { background: var(--pink); transform: translateY(-1px); }
 
 /* ── ADMIN ───────────────────────────────────────────── */
 .admin main { max-width: 82rem; }
+.admin-analytics { padding: clamp(1rem, 3vw, 1.5rem); margin-bottom: 1.25rem; background: var(--paper); border: 1.5px solid var(--div); border-radius: var(--r-lg); box-shadow: var(--sh-sm); }
+.analytics-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.analytics-heading h1 { font-size: clamp(1.4rem, 4vw, 1.9rem); }
+.admin-analytics h2 { margin-top: 1.3rem; font-size: 1.15rem; }
+.admin-analytics .analytics-sales-title { margin-top: 2rem; }
+.analytics-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .7rem; margin: 1rem 0; }
+.analytics-cards > div { padding: 1rem; background: var(--bg); border: 1px solid var(--div); border-radius: var(--r); }
+.analytics-cards dt { font-size: .8rem; color: var(--muted); }
+.analytics-cards dd { margin: .3rem 0 0; font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.analytics-filters { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-end; margin: 1rem 0; }
+.analytics-filters .field { flex: 1 1 10rem; min-width: 0; margin: 0; }
+.analytics-filters input { min-width: 0; }
+.analytics-filters .btn { margin-bottom: .15rem; }
+.analytics-warning { padding: .8rem 1rem; background: var(--card); color: var(--brown); border-radius: var(--r); font-size: .85rem; }
+.analytics-table { width: 100%; min-width: 38rem; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.analytics-table th, .analytics-table td { padding: .85rem; border-bottom: 1px solid var(--div); text-align: right; }
+.analytics-table th:first-child { text-align: left; }
+.analytics-table thead { background: var(--dark); color: var(--paper); }
+.analytics-table thead th { font-weight: 600; }
+.analytics-table tfoot { background: var(--card); font-weight: 700; }
 .toolbar { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-bottom: .85rem; }
 .toolbar .field { margin: 0; flex: 1 1 14rem; }
 .table-wrap { overflow-x: auto; background: var(--paper); border: 1.5px solid var(--div); border-radius: var(--r-lg); box-shadow: var(--sh-sm); }
